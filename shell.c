@@ -3,12 +3,12 @@
 #include <sys/wait.h>
 
 #include <readline/readline.h>
-#include <readline/history.h>
 
 #define MAXLINE 80
 #define MAXARGS 40
 
-void parseCmd(char* input, char* arg[])
+
+int parseCmd(char* input, char* arg[])
 {
     int i;
     for (i = 0; i < MAXARGS; i++)
@@ -18,6 +18,26 @@ void parseCmd(char* input, char* arg[])
             break;
         if (strlen(arg[i]) == 0)
             i--;
+    }
+    return i;
+}
+
+void addHistory(char *arg[], int len, char *his[])
+{
+    int i = 0;
+    char *str;
+    while (i < len)
+    {
+        his[i] = (char*)malloc((strlen(arg[i]) + 1) * sizeof(char));
+        strcpy(his[i], arg[i]);
+        //printf("%s %s\n", arg[i], his[i]);
+        i++;
+    }
+    for (int j = len; j < MAXARGS; j++)
+    {
+        if (his[j] == NULL)
+            break;
+        his[j] = NULL;
     }
 }
 
@@ -53,17 +73,36 @@ void printTest(char* arg[])
         printf("%s ", arg[i]);
         i++;
     }
+    printf("\n");
 }
 
 int main()
 {
-    char *arg[MAXARGS];
+    char *arg[MAXARGS], *history[MAXARGS];
     char *input;
+    int numberArg;
     while (1){
         input = readline("osh> "); 
-        parseCmd(input, arg);
-        //printTest(arg);        
-        execCmd(arg);
+        numberArg = parseCmd(input, arg);
+        //printTest(arg);
+        if (strcmp(arg[0], "!!") == 0)
+        {
+            if (history[0] == NULL)
+            {
+                printf("No history command!\n");
+            }
+            else
+            {
+                printf("osh> ");
+                printTest(history);
+                execCmd(history);
+            }
+        }
+        else
+        {
+           addHistory(arg, numberArg, history);
+           execCmd(arg);
+        }
     }
     return 0;
 }
