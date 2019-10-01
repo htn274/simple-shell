@@ -95,12 +95,13 @@ void execPipe(char* toPipe[], char* fromPipe[])
         printf("P1\n");
         // p1 write the result to the pipe
         close(fd[0]);
+        close((fd[1]);
         if (dup2(fd[1], STDOUT_FILENO) < 0)
         {
             perror("Pipe error");
             exit(0);
         }
-        close(fd[1]);
+        //close(fd[1]);
 
        printf("P1\n");
        if (execvp(toPipe[0], toPipe) < 0)
