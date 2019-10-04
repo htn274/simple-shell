@@ -7,6 +7,9 @@
 #define MAXLINE 80
 #define MAXARGS 40
 
+#define IN 0
+#define OUT 1
+
 
 int parseCmd(char* input, char* arg[])
 {
@@ -30,7 +33,6 @@ void addHistory(char *arg[], int len, char *his[])
     {
         his[i] = (char*)malloc((strlen(arg[i]) + 1) * sizeof(char));
         strcpy(his[i], arg[i]);
-        //printf("%s %s\n", arg[i], his[i]);
         i++;
     }
     for (int j = len; j < MAXARGS; j++)
@@ -48,7 +50,6 @@ void execCmd(char* arg[])
     if (pid == -1)
     {
         perror("Error");
-        //printf("Create child process: failed\n");
         return;
     }
     if (pid == 0)
@@ -56,9 +57,8 @@ void execCmd(char* arg[])
         if (execvp(arg[0], arg) < 0)
         {
             perror("Command error");
-            //printf("Could not execute command...\n");
         }
-        exit(0);
+        exit(1);
     }
     else
     {
@@ -67,7 +67,7 @@ void execCmd(char* arg[])
     }
 }
 
-void execPipe(char* toPipe[], char* fromPipe[])
+void execPipe(char* pipeWriter[], char* pipeReader[])
 {
     // 0: read, 1: write
     int fd[2];
@@ -79,9 +79,6 @@ void execPipe(char* toPipe[], char* fromPipe[])
         return;
     }
 
-    printf("Fd: %d %d\n", fd[0], fd[1]);
-
-    fflush(stdout);
     p1 = fork();
 
     if (p1 < 0)
@@ -92,23 +89,22 @@ void execPipe(char* toPipe[], char* fromPipe[])
 
     if (p1 == 0)
     {
-        printf("P1\n");
         // p1 write the result to the pipe
-        close(fd[0]);
+        //close(fd[0]);
+        fflush(stdout);
         if (dup2(fd[1], STDOUT_FILENO) < 0)
         {
             perror("Pipe error");
-            exit(0);
+            exit(1);
         }
         close(fd[1]);
+        close(fd[0]);
 
-       printf("P1\n");
-       if (execvp(toPipe[0], toPipe) < 0)
+       if (execvp(pipeWriter[0], pipeWriter) < 0)
        {
            perror("Pipe error");
-           exit(0);
+           exit(1);
        }
-       printf("P1 is executed!");
     }
     else
     {
@@ -123,24 +119,52 @@ void execPipe(char* toPipe[], char* fromPipe[])
 
         if (p2 == 0)
         {
-            close(fd[1]);
+            //close(fd[1]);
             dup2(fd[0], STDIN_FILENO);
             close(fd[0]);
+            close(fd[1]);
 
-            if (execvp(fromPipe[0], fromPipe) < 0)
+            if (execvp(pipeReader[0], pipeReader) < 0)
             {
                 perror("Pipe error");
-                exit(0);
+                exit(1);
             }
-            printf("P2 is executed!");
         }
         else
         {
+            int status;
+            close(fd[0]);
+            close(fd[1]);
+            //waitpid(p2, &status, 0);
             wait(NULL);
             wait(NULL);
         }
     }
 }
+
+/*
+void execRedirection(char* arg[], char* filename, int type)
+{
+    int fd;
+    if (type == IN)
+    {
+        fd = open(filename, O_READ);
+        if (fd < 0)
+        {
+            perror("Redirect Input Error");
+            exit(1);
+        }
+        if (dup2(fd, STDIN_FILENO) < 0)
+        {
+            perror("Redirect Input Error");
+            exit(1);
+        }
+    }
+    else
+    {
+    }
+}
+*/
 
 void printTest(char* arg[])
 {
@@ -159,7 +183,7 @@ void testPipe()
     first = readline("first: ");
     fflush(stdin);
     second = readline("second: ");
-    char *arg1[MAXARGS], arg2[MAXARGS];
+    char *arg1[MAXARGS], *arg2[MAXARGS];
 
     int num = parseCmd(first, arg1);
     num = parseCmd(second, arg2);
@@ -167,7 +191,7 @@ void testPipe()
     execPipe(arg1, arg2);
     //printTest(arg1);
     //printTest(arg2);
-    printf("Test pipe: sucessful");
+    printf("Test pipe: sucessful\n");
 }
 
 int main()
@@ -176,7 +200,10 @@ int main()
     char *input;
     int numberArg;
 
-    testPipe();
+    while (1)
+    {
+        testPipe();
+    }
     /*
     while (1){
         input = readline("osh> "); 
