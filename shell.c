@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/wait.h>
-
+#include <fcntl.h>
 #include <readline/readline.h>
 
 #define MAXLINE 80
@@ -132,39 +132,81 @@ void execPipe(char* pipeWriter[], char* pipeReader[])
         }
         else
         {
-            int status;
             close(fd[0]);
             close(fd[1]);
-            //waitpid(p2, &status, 0);
             wait(NULL);
             wait(NULL);
         }
     }
 }
 
-/*
-void execRedirection(char* arg[], char* filename, int type)
+
+void execRedirection(char *arg[], char* filename, int type)
 {
     int fd;
+    pid_t pid;
+    pid = fork();
+    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    int tmpIN = dup(IN), tmpOUT = dup(OUT);
+
     if (type == IN)
+        {
+            fd = open(filename, O_RDONLY, mode);
+            if (fd < 0)
+            {
+                perror("Redirect Input Error");
+                exit(1);
+            }
+            if (dup2(fd, STDIN_FILENO) < 0)
+            {
+                perror("Redirect Input Error");
+                exit(1);
+            }
+            close(fd);
+        }
+        else
+        {
+            fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, mode);
+            if (fd < 0)
+            {
+                perror("Redirect Output Error");
+                exit(1);
+            }
+
+            if (dup2(fd, STDOUT_FILENO) < 0)
+            {
+                perror("Redirect Output Error");
+                exit(1);
+            }
+            close(fd);
+        }
+    if (pid == -1)
     {
-        fd = open(filename, O_READ);
-        if (fd < 0)
+        perror("Redirect Error");
+        exit(1);
+    }
+
+    if (pid == 0)
+    {
+        if (execvp(arg[0], arg) < 0)
         {
-            perror("Redirect Input Error");
+            perror("Redirect Error");
             exit(1);
         }
-        if (dup2(fd, STDIN_FILENO) < 0)
-        {
-            perror("Redirect Input Error");
-            exit(1);
-        }
+        close(fd);
     }
     else
     {
+        close(fd);
+        dup2(tmpIN, IN);
+        dup2(tmpOUT, OUT);
+        close(tmpIN);
+        close(tmpOUT);
+        wait(NULL);
+        return;
     }
 }
-*/
+
 
 void printTest(char* arg[])
 {
@@ -189,9 +231,21 @@ void testPipe()
     num = parseCmd(second, arg2);
 
     execPipe(arg1, arg2);
-    //printTest(arg1);
-    //printTest(arg2);
     printf("Test pipe: sucessful\n");
+}
+
+void testRedirect()
+{
+    char *cmd, *filename;
+    int type;
+    cmd = readline("redir: ");
+    filename = readline("file name: ");
+    printf("type redirect: ");
+    scanf("%d", &type);
+    char* arg[MAXARGS];
+    parseCmd(cmd, arg);
+    execRedirection(arg, filename, type);
+    printf("Test Redirection: sucessful\n");
 }
 
 int main()
@@ -200,10 +254,13 @@ int main()
     char *input;
     int numberArg;
 
+    
     while (1)
     {
-        testPipe();
+        //testPipe();
+        testRedirect();
     }
+      
     /*
     while (1){
         input = readline("osh> "); 
@@ -229,5 +286,6 @@ int main()
         }
     }
     */
+    
     return 0;
 }
