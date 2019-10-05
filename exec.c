@@ -32,7 +32,7 @@ int cd(char **args) {
             res = chdir(args[1]);
     }
     if (res < 0)
-        perror("cd error:");
+        perror("cd error");
 
     return res;
 }
@@ -106,7 +106,7 @@ int redir_in(int fd[2], char *file) {
     fd[0] = open(file, O_RDONLY, 0);
     if (fd[0] < 0)
     {
-        perror("Redirect Input Error");
+        perror("Open file to read failed");
         return -1;
     }
 
@@ -123,7 +123,7 @@ int redir_out(int fd[2], char *file) {
     fd[1] = open(file, O_WRONLY | O_CREAT, mode);
     if (fd[1] < 0)
     {
-        perror("Redirect Output Error");
+        perror("Open file to write failed");
         return -1;
     }
     return 0;
@@ -142,7 +142,7 @@ int pipe_next(int cfd[2], int nfd[2]) {
 
     int pfd[2];
     if (pipe(pfd) < 0) {
-        perror("Pipe error");
+        perror("Pipe failed");
         return -1;
     }
 
