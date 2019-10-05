@@ -146,20 +146,19 @@ int run_command(struct command *cmd) {
     struct command *p = cmd;
 
     while (p) {
-        if (p->filename[0])
-            redir_in(cfd, p->filename[0]);
+        if (p->filename[0] && redir_in(cfd, p->filename[0]) < 0)
+            return -1;
 
-        if (p->filename[1])
-            redir_out(cfd, p->filename[1]);
+        if (p->filename[1] && redir_out(cfd, p->filename[1]) < 0)
+            return -1;
 
-        if (p->pipe)
-            pipe_next(cfd, nfd);
+        if (p->pipe && pipe_next(cfd, nfd) < 0)
+            return -1;
 
         pid_t pid = fexecCmd(p->args, cfd);
 
-        if (!p->async) {
+        if (!p->async)
             waitpid(pid, NULL, 0);
-        }
 
         move_fd(cfd, nfd);
         p = p->next;
@@ -198,6 +197,7 @@ int split(char* s, int *x)
         } else {
             if (isspace(s[i])) {
                 s[j++] = '\0';
+                delim = '\0';
                 ++i;
                 break;
             } else if (s[i] == '"' || s[i] == '\'') {
@@ -210,8 +210,13 @@ int split(char* s, int *x)
         }
     };
 
-    if (!s[i])
+    if (delim == ' ' && !s[i]) {
         s[j++] = '\0';
+        delim = '\0';
+    }
+    
+    if (delim != '\0')
+        return -1; //error
 
     *x = i;
 
@@ -249,14 +254,20 @@ struct command *parseCmd(char *cmd) {
 
         int plain = split(cmd, &pos);
 
+        if (plain == -1) {
+            fputs("Parse Error: Not closing \" or '\n", stderr);
+            free_command(head);
+            return NULL;
+        }
+
         int is_arg = !plain;
         int is_done = 0;
 
-        if (plain) {
-            if (cmd[i] == '\0') {
-                is_arg = 0;
-                is_done = 1;
-            } else if (strcmp(cmd + i, "|") == 0) {
+        if (cmd[i] == '\0') {
+            is_arg = !plain;
+            is_done = 1;
+        } else if (plain) {
+             if (strcmp(cmd + i, "|") == 0) {
                 c->pipe = 1;
                 is_done = 1;
             } else if (strcmp(cmd + i, "&&") == 0) {
@@ -284,7 +295,7 @@ struct command *parseCmd(char *cmd) {
 
         if (is_done) {
             if (!c->args) {
-                fputs("Command with no arguments\n", stderr);
+                fputs("Parse Error: Command with no arguments\n", stderr);
                 //free here
                 free_command(head);
                 return NULL;
