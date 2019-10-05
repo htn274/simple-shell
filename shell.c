@@ -316,7 +316,7 @@ int normalize(char **cmd) {
     if (history_length == 0)
         prev = NULL;
     else {
-        prev = history_get(history_base + history_length - 1)->line;
+        prev = history_get(history_length)->line;
         n = strlen(prev);
     }
     char *s = *cmd;
@@ -370,11 +370,18 @@ int main()
             continue;
         }
 
-        add_history(s);
-        
+        char *ss = malloc((strlen(s) + 1) * sizeof(char));
+        strcpy(ss, s);
+
         struct command *c = parseCmd(s);
-        run_command(c);
-        free_command(c);
+
+        if (c) {
+            add_history(ss);
+            run_command(c);
+            free_command(c);
+        }
+
+        free(ss);
         free(s);
     }
     
