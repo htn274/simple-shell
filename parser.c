@@ -4,13 +4,12 @@
 #include <ctype.h>
 #include <string.h>
 
-void free_command(struct command *c) {
-    if (!c)
-        return;
-
-    free(c->args);
-    free_command(c->next);
-    free(c);
+void free_command(struct lcommand c) {
+    int i;
+    for (i = 0; i < c.n; ++i)
+        free(c.c[i].args);
+    
+    free(c.c);
 }
 
 void skip_space(char *s, int *x) {
@@ -68,19 +67,20 @@ int split(char* s, int *x)
     return plain;
 }
 
-struct command *parse_command(char *cmd) {
+struct lcommand parse_command(char *cmd) {
     int i = 0;
     int pos = 0;
     int argc = 0;
 
     skip_space(cmd, &pos);
 
-    if (cmd[pos] == '\0')
-        return NULL;
 
-    struct command *c = calloc(1, sizeof(struct command));
-    struct command *head = c;
-    struct command *prev = NULL;
+    struct lcommand res = null_lcmd;
+
+    if (cmd[pos] == '\0')
+        return null_lcmd;
+
+    struct command c = null_cmd;
 
     do {
         i = pos;
@@ -89,8 +89,8 @@ struct command *parse_command(char *cmd) {
 
         if (plain == -1) {
             fputs("Parse Error: Not closing \" or '\n", stderr);
-            free_command(head);
-            return NULL;
+            free_command(res);
+            return null_lcmd;
         }
 
         int is_arg = !plain;
@@ -101,20 +101,20 @@ struct command *parse_command(char *cmd) {
             is_done = 1;
         } else if (plain) {
              if (strcmp(cmd + i, "|") == 0) {
-                c->pipe = 1;
+                c.pipe = 1;
                 is_done = 1;
             } else if (strcmp(cmd + i, "&&") == 0) {
                 is_done = 1;
             } else if (strcmp(cmd + i, "&") == 0) {
-                c->async = 1;
+                c.async = 1;
             } else if (strcmp(cmd + i, "<") == 0) {
                 int j = pos;
                 split(cmd, &pos); //this is file :P
-                c->filename[0] = cmd + j;
+                c.filename[0] = cmd + j;
             } else if (strcmp(cmd + i, ">") == 0) {
                 int j = pos;
                 split(cmd, &pos); //this is file :P
-                c->filename[1] = cmd + j;
+                c.filename[1] = cmd + j;
             } else {
                 is_arg = 1;
             }
@@ -122,30 +122,30 @@ struct command *parse_command(char *cmd) {
 
         if (is_arg){
             ++argc;
-            c->args = realloc(c->args, sizeof(char*) * (argc + 1));
-            c->args[argc - 1] = cmd + i;
+            c.args = realloc(c.args, sizeof(char*) * (argc + 1));
+            c.args[argc - 1] = cmd + i;
         }
 
         if (is_done) {
-            if (!c->args) {
+            if (!c.args) {
                 fputs("Parse Error: Command with no arguments\n", stderr);
                 //free here
-                free_command(head);
-                return NULL;
+                free_command(res);
+                return null_lcmd;
             }
 
-            c->argc = argc;
-            c->args[argc] = NULL;
+            c.argc = argc;
+            c.args[argc] = NULL;
             argc = 0;
+
             //add to head
-            c->next = calloc(1, sizeof(struct command));
-            prev = c;
-            c = c->next;
+            ++res.n;
+            res.c = realloc(res.c, sizeof(struct command) * res.n);
+            res.c[res.n-1] = c;
+
+            c = null_cmd;
         }
     } while(cmd[i] != '\0');
-
-    free(c);
-    prev->next = NULL;
-    return head;
+    return res;
 }
 

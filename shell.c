@@ -38,9 +38,8 @@ int normalize(char **cmd) {
     int rep = 0;
 
     char *new = NULL;
-    int j = 0;
-
-    for (int i = 0; s[i]; ++i) {
+    int i = 0, j = 0;
+    for (; s[i]; ++i) {
         if (s[i] == '!' && s[i+1] == '!') {
             if (!prev)
                 return -1;
@@ -99,9 +98,9 @@ int main()
         char *ss = malloc((strlen(s) + 1) * sizeof(char));
         strcpy(ss, s);
 
-        struct command *c = parse_command(s);
+        struct lcommand c = parse_command(s);
 
-        if (c) {
+        if (c.n > 0) {
             add_history(ss);
             exec_command(c);
             free_command(c);

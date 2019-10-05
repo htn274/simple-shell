@@ -41,9 +41,10 @@ void extend_cmd(struct command *c){
     if (strcmp(c->args[0], "ls")   == 0 ||
         strcmp(c->args[0], "grep") == 0) 
     {
+        int i;
         ++c->argc;
         c->args = realloc(c->args, (c->argc + 1) * sizeof(char *));
-        for (int i = c->argc; i > 1; --i)
+        for (i = c->argc; i > 1; --i)
             c->args[i] = c->args[i-1];
     
         c->args[1] = "--color=tty";
@@ -159,13 +160,15 @@ void move_fd(int cfd[2], int nfd[2]) {
 }
 
 
-int exec_command(struct command *cmd) {
+int exec_command(struct lcommand cmd) {
     int cfd[2] = {-1, -1};
     int nfd[2] = {-1, -1};
 
-    struct command *p = cmd;
+    pid_t *pid = malloc(cmd.n * sizeof(pid_t));
 
-    while (p) {
+    int i;
+    for (i = 0; i < cmd.n; ++i) {
+        struct command *p = cmd.c + i;
         if (p->filename[0] && redir_in(cfd, p->filename[0]) < 0)
             return -1;
 
@@ -176,14 +179,17 @@ int exec_command(struct command *cmd) {
             return -1;
 
         extend_cmd(p);
-        pid_t pid = fexec_cmd(p->args, cfd);
+        pid[i] = fexec_cmd(p->args, cfd);
 
-        if (!p->async && pid >= 0)
-            waitpid(pid, NULL, 0);
+        if (!p->pipe && !p->async && pid[i] >= 0)
+            waitpid(pid[i], NULL, 0);
 
         move_fd(cfd, nfd);
-        p = p->next;
     }
+
+    for (i = 0; i < cmd.n; ++i)
+        if (cmd.c[i].pipe && !cmd.c[i].async)
+            waitpid(pid[i], NULL, 0);
 
     return 0;
 }

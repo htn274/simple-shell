@@ -1,6 +1,10 @@
 #ifndef _CMD_
 #define _CMD_
 
+#ifndef NULL
+#define NULL (void *)0
+#endif 
+
 struct command {
     int argc;
     char **args;
@@ -8,12 +12,20 @@ struct command {
 
     char *filename[2];
     int pipe; //true mean pipe, when pipe to next command
-
-    struct command *next;
 };
 
-void free_command(struct command *c);
-int exec_command(struct command *cmd);
-struct command *parse_command(char *cmd);
+static const struct command null_cmd = {0, NULL, 0, {NULL, NULL}, 0};
+
+struct lcommand {
+    int n;
+    struct command *c;
+};
+
+static const struct lcommand null_lcmd = {0, NULL};
+
+
+void free_command(struct lcommand c);
+int exec_command(struct lcommand cmd);
+struct lcommand parse_command(char *cmd);
 
 #endif
