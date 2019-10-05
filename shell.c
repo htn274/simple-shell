@@ -306,6 +306,9 @@ struct command *parseCmd(char *cmd) {
 }
 
 int normalize(char **cmd) {
+    if (**cmd == '\0')
+        return 0;
+
     char *prev;
     int n = 0;
 
