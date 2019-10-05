@@ -191,5 +191,7 @@ int exec_command(struct lcommand cmd) {
         if (cmd.c[i].pipe && !cmd.c[i].async)
             waitpid(pid[i], NULL, 0);
 
+    free(pid);
+
     return 0;
 }

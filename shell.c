@@ -75,6 +75,7 @@ int main()
         fputs("\x1B[38;5;3m", stdout);
         fputs(wd, stdout);
         fputs("\x1B[0m\n", stdout);
+        free(wd);
 
         running = 0;
         s = readline(SHELL_NAME);
