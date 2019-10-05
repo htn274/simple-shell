@@ -33,6 +33,13 @@ struct command {
 
 pid_t fexecCmd(char **args, const int fd[2])
 {
+    if (strcmp(args[0], "exit") == 0) {
+        if (args[1])
+            exit(atoi(args[1]));
+        else
+            exit(0);
+    }
+
     pid_t p = vfork();
     if (p < 0)
         return -1;
@@ -298,6 +305,47 @@ struct command *parseCmd(char *cmd) {
     return head;
 }
 
+int normalize(char **cmd) {
+    char *prev;
+    int n = 0;
+
+    
+    if (history_length == 0)
+        prev = NULL;
+    else {
+        prev = history_get(history_base + history_length - 1)->line;
+        n = strlen(prev);
+    }
+    char *s = *cmd;
+    int rep = 0;
+
+    char *new = NULL;
+    int j = 0;
+
+    for (int i = 0; s[i]; ++i) {
+        if (s[i] == '!' && s[i+1] == '!') {
+            if (!prev)
+                return -1;
+
+            new = realloc(new, (j + n + 2) * sizeof(char));
+            strcpy(new + j, prev);
+            j+=n;
+            ++i;
+
+            rep = 1;
+        } else {
+            new = realloc(new, (j + 2) * sizeof(char));
+            new[j] = s[i];
+            ++j;
+        }
+    }
+    new[j] = '\0';
+    free(s);
+
+    *cmd = new;
+    return rep;
+}
+
 int main()
 {
     signal(SIGINT,handler);
@@ -308,6 +356,16 @@ int main()
         s = readline(SHELL_NAME);
         if (!s)
             break;
+
+        int r = normalize(&s);
+        if (r == 1) {
+            fputs(s, stdout);
+            fputs("\n", stdout);
+        } else if (r == -1){
+            fputs("No history\n", stdout);
+            free(s);
+            continue;
+        }
 
         add_history(s);
         
