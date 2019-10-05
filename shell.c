@@ -38,16 +38,37 @@ pid_t fexecCmd(char **args, const int fd[2])
             exit(atoi(args[1]));
         else
             exit(0);
+    } else if (strcmp(args[0], "cd") == 0) {
+        int res = 0;
+        if (!args[1])
+            res = chdir(getenv("HOME"));
+        else if (args[2])
+            fputs("cd error: Too many arguments\n", stderr);
+        else  {
+            if (args[1][0] == '~') {
+                res = chdir(getenv("HOME"));
+                args[1][0] = '.';
+            }
+            
+            if (res >= 0)
+                res = chdir(args[1]);
+        }
+        if (res < 0)
+            perror("cd error:");
+
+        return -1;
     }
 
     pid_t p = vfork();
-    if (p < 0)
+    if (p < 0) {
+        perror("Exec fork failed");
         return -1;
+    }
 
     if (p == 0) {
         if (fd[0] >= 0) {
             if (dup2(fd[0], STDIN_FILENO) < 0) {
-                perror("Redirect in fail");
+                perror("Exec input redirect failed");
                 exit(1);
             }
             close(fd[0]);
@@ -55,14 +76,14 @@ pid_t fexecCmd(char **args, const int fd[2])
 
         if (fd[1] >= 0) {
             if (dup2(fd[1], STDOUT_FILENO) < 0) {
-                perror("Redirect out fail");
+                perror("Exec output redirect failed");
                 exit(1);     
             }
             close(fd[1]);
         }
     
         execvp(args[0], args);
-        perror("Exec cmd fail");
+        perror("Exec failed");
         exit(1); //error
     } else {
         if (fd[0] >= 0)
@@ -201,7 +222,6 @@ int split(char* s, int *x)
                 ++i;
                 break;
             } else if (s[i] == '"' || s[i] == '\'') {
-                //meo bad for operator
                 plain = 0;
                 delim = s[i];
             } else {
@@ -235,7 +255,6 @@ void free_command(struct command *c) {
 }
 
 struct command *parseCmd(char *cmd) {
-
     int i = 0;
     int pos = 0;
     int argc = 0;
