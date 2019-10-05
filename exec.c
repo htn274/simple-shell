@@ -37,6 +37,19 @@ int cd(char **args) {
     return res;
 }
 
+void extend_cmd(struct command *c){
+    if (strcmp(c->args[0], "ls")   == 0 ||
+        strcmp(c->args[0], "grep") == 0) 
+    {
+        ++c->argc;
+        c->args = realloc(c->args, (c->argc + 1) * sizeof(char *));
+        for (int i = c->argc; i > 1; --i)
+            c->args[i] = c->args[i-1];
+    
+        c->args[1] = "--color=tty";
+    }
+}
+
 pid_t fexec_cmd(char **args, const int fd[2])
 {
     if (strcmp(args[0], "exit") == 0) {
@@ -162,6 +175,7 @@ int exec_command(struct command *cmd) {
         if (p->pipe && pipe_next(cfd, nfd) < 0)
             return -1;
 
+        extend_cmd(p);
         pid_t pid = fexec_cmd(p->args, cfd);
 
         if (!p->async && pid >= 0)

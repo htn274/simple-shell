@@ -134,6 +134,7 @@ struct command *parse_command(char *cmd) {
                 return NULL;
             }
 
+            c->argc = argc;
             c->args[argc] = NULL;
             argc = 0;
             //add to head
@@ -145,7 +146,6 @@ struct command *parse_command(char *cmd) {
 
     free(c);
     prev->next = NULL;
-    
     return head;
 }
 

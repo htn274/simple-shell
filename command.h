@@ -2,6 +2,7 @@
 #define _CMD_
 
 struct command {
+    int argc;
     char **args;
     int async;
 

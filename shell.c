@@ -69,7 +69,10 @@ int main()
     char *s;
     while (1)
     {
+        running = 0;
         s = readline(SHELL_NAME);
+        running = 1;
+
         if (!s)
             break;
 
