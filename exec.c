@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 
 #include "command.h"
@@ -188,7 +189,7 @@ int exec_command(struct lcommand cmd) {
     }
 
     for (i = 0; i < cmd.n; ++i)
-        if (cmd.c[i].pipe && !cmd.c[i].async)
+        if (cmd.c[i].pipe && !cmd.c[i].async && pid[i] >= 0)
             waitpid(pid[i], NULL, 0);
 
     free(pid);

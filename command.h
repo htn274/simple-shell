@@ -19,6 +19,8 @@ static const struct command null_cmd = {0, NULL, 0, {NULL, NULL}, 0};
 struct lcommand {
     int n;
     struct command *c;
+    
+    char *arg;
 };
 
 static const struct lcommand null_lcmd = {0, NULL};
@@ -26,6 +28,6 @@ static const struct lcommand null_lcmd = {0, NULL};
 
 void free_command(struct lcommand c);
 int exec_command(struct lcommand cmd);
-struct lcommand parse_command(char *cmd);
+struct lcommand parse_command(const char *cmd);
 
 #endif

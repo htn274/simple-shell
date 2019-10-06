@@ -10,6 +10,7 @@ void free_command(struct lcommand c) {
         free(c.c[i].args);
     
     free(c.c);
+    free(c.arg);
 }
 
 void skip_space(char *s, int *x) {
@@ -67,18 +68,24 @@ int split(char* s, int *x)
     return plain;
 }
 
-struct lcommand parse_command(char *cmd) {
+struct lcommand parse_command(const char *s) {
     int i = 0;
     int pos = 0;
     int argc = 0;
+
+    char *cmd = malloc((strlen(s) + 1) * sizeof(char));
+    strcpy(cmd, s);
 
     skip_space(cmd, &pos);
 
 
     struct lcommand res = null_lcmd;
+    res.arg = cmd;
 
-    if (cmd[pos] == '\0')
+    if (cmd[pos] == '\0') {
+        free_command(res);
         return null_lcmd;
+    }
 
     struct command c = null_cmd;
 
