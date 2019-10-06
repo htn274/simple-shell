@@ -10,7 +10,12 @@
 
 #include "command.h"
 
-void shell_exit(char **args) {
+int shell_exit(char **args) {
+    if (args[1] && args[2]) {
+        fputs("exit error: Too many arguments\n", stderr);
+        return -1;
+    }
+    
     if (args[1])
         exit(atoi(args[1]));
     else
@@ -38,6 +43,41 @@ int cd(char **args) {
     return res;
 }
 
+int set(char **args) {
+    if (!args[1] || !args[2]){
+        fputs("set error: Too few arguments\n", stderr);
+        return -1;
+    }
+    if (args[3]) {
+        fputs("set error: Too many arguments\n", stderr);
+        return -1;
+    }
+
+    if (setenv(args[1], args[2], 1) < 0) {
+        perror("set error");
+        return -1;
+    }
+    return 0;
+}
+
+int unset(char **args) {
+    if (!args[1]){
+        fputs("unset error: Too few arguments\n", stderr);
+        return -1;
+    }
+    if (args[2]) {
+        fputs("unset error: Too many arguments\n", stderr);
+        return -1;
+    }
+
+    if (unsetenv(args[1]) < 0) {
+        perror("unset error");
+        return -1;
+    }
+
+    return 0;
+}
+
 void extend_cmd(struct command *c){
     if (strcmp(c->args[0], "ls")   == 0 ||
         strcmp(c->args[0], "grep") == 0) 
@@ -59,6 +99,12 @@ pid_t fexec_cmd(char **args, const int fd[2])
         return -1;
     } else if (strcmp(args[0], "cd") == 0) {
         cd(args);
+        return -1;
+    } else if (strcmp(args[0], "set") == 0) {
+        set(args);
+        return -1;
+    } else if (strcmp(args[0], "unset") == 0) {
+        unset(args);
         return -1;
     }
 
