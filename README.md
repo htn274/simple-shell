@@ -9,7 +9,7 @@
 1. Download this repository from github.
 
     ```bash
-    git clone git@github.com:htn274/simple-shell.git
+    git clone https://github.com/htn274/simple-shell.git
     cd simple-shell
     ```
 
