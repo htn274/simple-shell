@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include "error.h"
 
 #include "command.h"
 
@@ -79,17 +80,42 @@ int unset(char **args) {
     return 0;
 }
 
-void extend_cmd(struct command *c){
-    if (strcmp(c->args[0], "ls")   == 0 ||
-        strcmp(c->args[0], "grep") == 0) 
-    {
-        int i;
-        ++c->argc;
-        c->args = realloc(c->args, (c->argc + 1) * sizeof(char *));
-        for (i = c->argc; i > 1; --i)
-            c->args[i] = c->args[i-1];
-    
-        c->args[1] = strdup("--color=tty");
+int alias(char **args) {
+    if (!args[1]){
+        fputs("alias error: Too few arguments\n", stderr);
+        return -1;
+    } else if (!args[2]) {
+        const char *cmd = find_alias(args[1]);
+        if (cmd)
+            printf("alias %s='%s'\n", args[1], cmd);
+        else
+            printf("alias %s is not exist\n", args[1]);
+        return 0;
+    } else if(args[3]) {
+        fputs("alias error: Too many arguments\n", stderr);
+        return -1;
+    } else {
+        if (set_alias(args[1], args[2]) < 0) {
+            fputs(error_str, stderr);
+            return -1;
+        }
+        return 0;
+    }
+}
+
+int unalias(char **args) {
+    if (!args[1]){
+        fputs("alias error: Too few arguments\n", stderr);
+        return -1;
+    } else if (args[2]) {
+        fputs("alias error: Too many arguments\n", stderr);
+        return -1;
+    } else {    
+        if (unset_alias(args[1]) < 0) {
+            printf("alias %s is not exist\n", args[1]);
+            return -1;
+        }
+        return 0;
     }
 }
 
@@ -106,6 +132,12 @@ pid_t fexec_cmd(char **args, const int fd[3])
         return -1;
     } else if (strcmp(args[0], "unset") == 0) {
         unset(args);
+        return -1;
+    } else if (strcmp(args[0], "alias") == 0) {
+        alias(args);
+        return -1;
+    } else if (strcmp(args[0], "unalias") == 0) {
+        unalias(args);
         return -1;
     }
 
@@ -250,7 +282,6 @@ int exec_lcommand(struct lcommand cmd) {
             return -1;
         }
 
-        extend_cmd(p);
         pid[i] = fexec_cmd(p->args, cfd);
 
         if (!p->pipe && !p->async && pid[i] >= 0)

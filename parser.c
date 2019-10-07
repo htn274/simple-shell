@@ -1,35 +1,8 @@
 #include "command.h"
-#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
-
-static const char n_stok = 9;
-static const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";"};
-
-#define TOK_ARG -1
-#define TOK_AND 0
-#define TOK_ASYNC 1
-#define TOK_PIPE 2
-#define TOK_RDR_IN 3
-#define TOK_RDR_OUT 4
-#define TOK_RDR_ERR_OUT 5
-//#define TOK_OBRACK 6 //open bracket
-//#define TOK_CBRRACK 7 //close bracket
-#define TOK_SEMICOL 8
-
-char *error_str = "no error\n";
-
-struct token_t {
-    int type; //-1 if not special token
-    char *val;
-};
-
-struct ltoken_t {
-    int n;
-    struct token_t *tok;
-};
-
-const struct ltoken_t null_ltok = {0,0};
+#include "token.h"
+#include "error.h"
 
 void free_command(struct command *c) {
     int i;
@@ -55,128 +28,6 @@ void free_lcommand(struct lcommand *c)
     *c = null_lcmd;
 }
 
-void free_ltok(struct ltoken_t *ltok)
-{
-    int i;
-    for (i = 0; i < ltok->n; ++i) {
-        if (ltok->tok[i].type == TOK_ARG)
-            free(ltok->tok[i].val);
-    }
-
-    free(ltok->tok);
-}
-
-static inline int skip_space(const char *s, int i)
-{
-    while (s[i] && isspace(s[i]))
-        ++i;
-
-    return i;
-}
-
-void add_token(struct ltoken_t *ltok, const struct token_t tok)
-{
-    ++ltok->n;
-    ltok->tok = realloc(ltok->tok, ltok->n * sizeof(struct token_t));
-    ltok->tok[ltok->n-1] = tok;
-}
-
-static inline struct token_t get_tok(int type)
-{
-    struct token_t tok = {type, NULL};
-    return tok;
-}
-
-
-static inline struct token_t get_arg(char *arg)
-{
-    struct token_t tok = {TOK_ARG, arg};
-    return tok;
-}
-
-static inline int compare_tok(const char *s, int tok) {
-    int i = 0;
-    const char *t = spec_tok[tok];
-    while (s[i] && t[i] && s[i] == t[i])
-        ++i;
-
-    if (!t[i])
-        return i;
-    
-    return 0;
-}
-
-//convert to token
-int tokenize(const char *s, struct ltoken_t *ltok)
-{
-    char *val = malloc((strlen(s) + 1) * sizeof(char));
-
-    *ltok = null_ltok;
-
-    int i = 0;
-
-    while (1) {
-        i = skip_space(s, i);
-
-        if (!s[i])
-            break;
-
-        int j = 0;
-        char delim = ' ';
-
-        while(1) {
-            if (delim != ' ') {
-                if (!s[i]) {
-                    error_str = "Parse Error: Not closing \" or '\n";
-                    goto token_error;
-                } else if (s[i] == delim)
-                    delim = ' ';
-                else
-                    val[j++] = s[i];
-            } else {
-                int special = -1;
-                //checkfor special tok
-                for (int k = 0; k < n_stok; ++k) {
-                    int len = compare_tok(s + i, k);
-                    if (len) {
-                        i += len;
-                        special = k;
-                        break;
-                    }
-                }
-
-                if (special >= 0 || !s[i] || isspace(s[i])) {
-                    if (j) {
-                        val[j++] = '\0';
-                        add_token(ltok, get_arg(strdup(val)));
-                    }
-
-                    if (special >= 0)
-                        add_token(ltok, get_tok(special));
-
-                    break;
-                }
-
-                if (s[i] == '"' || s[i] == '\'')
-                    delim = s[i];
-                else
-                    val[j++] = s[i];
-            }
-            ++i;
-        };
-    }
-
-    if (ltok->n && ltok->tok[ltok->n-1].type != TOK_SEMICOL)
-        add_token(ltok, get_tok(TOK_SEMICOL));
-
-    free(val);
-    return 0;
-token_error:
-    free_ltok(ltok);
-    free(val);
-    return -1;
-}
-
 int get_rdr_type(int token) {
     int type = -1;
     switch(token) {
@@ -198,6 +49,10 @@ int parse_command(const char *s, struct lcommand *cmd) {
     if (tokenize(s, &ltok))
         return -1;
     
+    //add ending
+    if (ltok.n && ltok.tok[ltok.n-1].type != TOK_SEMICOL)
+        add_token(&ltok, get_tok(TOK_SEMICOL));
+
 
     *cmd = null_lcmd;
     struct command c = null_cmd;

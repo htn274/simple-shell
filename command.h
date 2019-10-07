@@ -24,12 +24,17 @@ struct lcommand {
 
 static const struct lcommand null_lcmd = {0, NULL};
 
-extern char *error_str;
-
 void free_command(struct command *c);
 void free_lcommand(struct lcommand *c);
 
 int exec_lcommand(struct lcommand cmd);
 int parse_command(const char *s, struct lcommand *cmd);
+
+int set_alias(const char *alias, const char * cmd);
+int unset_alias(const char *alias);
+const char *find_alias(const char *alias);
+
+char *replace_env_var(char *s);
+
 
 #endif

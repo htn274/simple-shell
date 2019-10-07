@@ -5,8 +5,8 @@
 #include <readline/history.h>
 #include <signal.h>
 #include "command.h"
+#include "error.h"
 #include <unistd.h>
-
 
 #define SHELL_NAME "\x1B[38;5;2m\x1B[1mosh>\x1B[0m "
 
@@ -26,7 +26,6 @@ int normalize(char **cmd) {
 
     char *prev;
     int n = 0;
-
     
     if (history_length == 0)
         prev = NULL;
@@ -34,6 +33,7 @@ int normalize(char **cmd) {
         prev = history_get(history_length)->line;
         n = strlen(prev);
     }
+
     char *s = *cmd;
     int rep = 0;
 
@@ -56,49 +56,12 @@ int normalize(char **cmd) {
             ++j;
         }
     }
+
     new[j] = '\0';
     free(s);
 
     *cmd = new;
     return rep;
-}
-
-char *replace_env_var(char *s) {
-    char *new = calloc(1, sizeof(char)); //empty string
-    int i = 0, j =0;;
-
-    for (; s[i]; ++i) {
-        if (s[i] == '$') {
-            int k = i + 1;
-            while (s[k] && isalnum(s[k])) {
-                ++k;
-            }
-
-            if (k > i + 1) {
-                char temp = s[k];
-                s[k] = '\0';
-                char *val = getenv(s + i + 1);
-                s[k] = temp;
-
-                if (val) {
-                    int lval = strlen(val);
-                    new = realloc(new, (j + lval + 1) * sizeof(char));
-                    strcpy(new + j, val);
-                    j += lval;
-                }
-
-                i = k - 1;
-                continue;
-            }
-        }
-
-        new = realloc(new, (j + 2) * sizeof(char));
-        new[j] = s[i];
-        ++j;
-    }
-
-    new[j] = '\0';
-    return new;
 }
 
 int main()
