@@ -88,7 +88,7 @@ void extend_cmd(struct command *c){
         for (i = c->argc; i > 1; --i)
             c->args[i] = c->args[i-1];
     
-        c->args[1] = "--color=tty";
+        c->args[1] = strdup("--color=tty");
     }
 }
 
@@ -207,7 +207,7 @@ void move_fd(int cfd[2], int nfd[2]) {
 }
 
 
-int exec_command(struct lcommand cmd) {
+int exec_lcommand(struct lcommand cmd) {
     int cfd[2] = {-1, -1};
     int nfd[2] = {-1, -1};
 
@@ -216,14 +216,20 @@ int exec_command(struct lcommand cmd) {
     int i;
     for (i = 0; i < cmd.n; ++i) {
         struct command *p = cmd.c + i;
-        if (p->filename[0] && redir_in(cfd, p->filename[0]) < 0)
+        if (p->filename[0] && redir_in(cfd, p->filename[0]) < 0) {
+            free(pid);
             return -1;
+        }
 
-        if (p->filename[1] && redir_out(cfd, p->filename[1]) < 0)
+        if (p->filename[1] && redir_out(cfd, p->filename[1]) < 0) {
+            free(pid);
             return -1;
+        }
 
-        if (p->pipe && pipe_next(cfd, nfd) < 0)
+        if (p->pipe && pipe_next(cfd, nfd) < 0) {
+            free(pid);
             return -1;
+        }
 
         extend_cmd(p);
         pid[i] = fexec_cmd(p->args, cfd);

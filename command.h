@@ -16,18 +16,20 @@ struct command {
 
 static const struct command null_cmd = {0, NULL, 0, {NULL, NULL}, 0};
 
+
 struct lcommand {
     int n;
     struct command *c;
-    
-    char *arg;
 };
 
 static const struct lcommand null_lcmd = {0, NULL};
 
+extern char *error_str;
 
-void free_command(struct lcommand c);
-int exec_command(struct lcommand cmd);
-struct lcommand parse_command(const char *cmd);
+void free_command(struct command *c);
+void free_lcommand(struct lcommand *c);
+
+int exec_lcommand(struct lcommand cmd);
+int parse_command(const char *s, struct lcommand *cmd);
 
 #endif

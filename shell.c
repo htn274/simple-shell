@@ -132,13 +132,15 @@ int main()
         }
 
         char *s2 = replace_env_var(s);
-        struct lcommand c = parse_command(s2);
+        struct lcommand c;
+        if (parse_command(s2, &c))
+            fputs(error_str, stderr);
         free(s2);
 
         if (c.n > 0) {
             add_history(s);
-            exec_command(c);
-            free_command(c);
+            exec_lcommand(c);
+            free_lcommand(&c);
         }
 
         free(s);
