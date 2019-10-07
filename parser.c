@@ -40,6 +40,8 @@ void free_command(struct command *c) {
 
     free(c->filename[0]);
     free(c->filename[1]);
+
+    *c = null_cmd;
 }
 
 void free_lcommand(struct lcommand *c)
@@ -49,6 +51,8 @@ void free_lcommand(struct lcommand *c)
         free_command(c->c + i);
     
     free(c->c);
+
+    *c = null_lcmd;
 }
 
 void free_ltok(struct ltoken_t *ltok)
