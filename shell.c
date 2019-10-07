@@ -68,6 +68,11 @@ int main()
 {
     signal(SIGINT,handler);
     
+    set_alias("ls", "ls --color=auto");
+    set_alias("grep", "grep --color=auto");
+    set_alias("l", "ls -lah");
+    set_alias("la", "ls -lAh");
+
     char *s;
     while (1)
     {
