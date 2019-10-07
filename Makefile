@@ -1,6 +1,8 @@
 all: shell.c
 	gcc -Wall -O2 -o shell shell.c exec.c parser.c -lreadline
 
+run:
+	./shell
 debug:
 	gcc -Wall -g -o shell shell.c exec.c parser.c -lreadline
 
