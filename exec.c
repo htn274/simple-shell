@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include "command.h"
 
@@ -133,14 +134,18 @@ pid_t fexec_cmd(char **args, const int fd[3])
 
         if (fd[2] >= 0) {
             if (dup2(fd[2], STDERR_FILENO) < 0) {
-                perror("Exec output redirect failed");
+                perror("Exec error output redirect failed");
                 exit(1);     
             }
             close(fd[1]);
         }
     
         execvp(args[0], args);
-        perror("Exec failed");
+        if (errno == ENOENT)
+            fprintf(stderr, "Exec failed: command not found (%s)\n", args[0]);
+        else
+            perror("Exec failed");
+
         exit(1); //error
     } else {
         if (fd[0] >= 0)
