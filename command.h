@@ -10,7 +10,7 @@ struct command {
     char **args;
     int async;
 
-    char *filename[2];
+    char *filename[3];
     int pipe; //true mean pipe, when pipe to next command
 };
 

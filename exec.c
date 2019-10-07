@@ -92,7 +92,7 @@ void extend_cmd(struct command *c){
     }
 }
 
-pid_t fexec_cmd(char **args, const int fd[2])
+pid_t fexec_cmd(char **args, const int fd[3])
 {
     if (strcmp(args[0], "exit") == 0) {
         shell_exit(args);
@@ -130,6 +130,14 @@ pid_t fexec_cmd(char **args, const int fd[2])
             }
             close(fd[1]);
         }
+
+        if (fd[2] >= 0) {
+            if (dup2(fd[2], STDERR_FILENO) < 0) {
+                perror("Exec output redirect failed");
+                exit(1);     
+            }
+            close(fd[1]);
+        }
     
         execvp(args[0], args);
         perror("Exec failed");
@@ -145,14 +153,14 @@ pid_t fexec_cmd(char **args, const int fd[2])
     }
 }
 
-int redir_in(int fd[2], char *file) {
-    if (fd[0] >= 0) {
+int redir_in(int *fd, char *file) {
+    if (*fd >= 0) {
         fputs("Can't have two input\n", stderr);
         return -1;
     }
 
-    fd[0] = open(file, O_RDONLY, 0);
-    if (fd[0] < 0)
+    *fd = open(file, O_RDONLY, 0);
+    if (*fd < 0)
     {
         perror("Open file to read failed");
         return -1;
@@ -161,15 +169,15 @@ int redir_in(int fd[2], char *file) {
     return 0;
 }
 
-int redir_out(int fd[2], char *file) {
+int redir_out(int *fd, char *file) {
     const mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    if (fd[1] >= 0) {
+    if (*fd >= 0) {
         fputs("Can't have two output\n", stderr);
         return -1;
     }
 
-    fd[1] = open(file, O_WRONLY | O_CREAT, mode);
-    if (fd[1] < 0)
+    *fd = open(file, O_WRONLY | O_CREAT, mode);
+    if (*fd < 0)
     {
         perror("Open file to write failed");
         return -1;
@@ -177,7 +185,7 @@ int redir_out(int fd[2], char *file) {
     return 0;
 }
 
-int pipe_next(int cfd[2], int nfd[2]) {
+int pipe_next(int cfd[3], int nfd[3]) {
     if (cfd[1] >= 0) {
         fputs("Can't have two output\n", stderr);
         return -1;
@@ -199,29 +207,35 @@ int pipe_next(int cfd[2], int nfd[2]) {
     return 0;
 }
 
-void move_fd(int cfd[2], int nfd[2]) {
+void move_fd(int cfd[3], int nfd[3]) {
     cfd[0] = nfd[0];
     cfd[1] = nfd[1];
+    cfd[2] = nfd[2];
 
-    nfd[0] = nfd[1] = -1;
+    nfd[0] = nfd[1] = nfd[2] = -1;
 }
 
 
 int exec_lcommand(struct lcommand cmd) {
-    int cfd[2] = {-1, -1};
-    int nfd[2] = {-1, -1};
+    int cfd[3] = {-1, -1, -1};
+    int nfd[3] = {-1, -1, -1};
 
     pid_t *pid = malloc(cmd.n * sizeof(pid_t));
 
     int i;
     for (i = 0; i < cmd.n; ++i) {
         struct command *p = cmd.c + i;
-        if (p->filename[0] && redir_in(cfd, p->filename[0]) < 0) {
+        if (p->filename[0] && redir_in(&cfd[0], p->filename[0]) < 0) {
             free(pid);
             return -1;
         }
 
-        if (p->filename[1] && redir_out(cfd, p->filename[1]) < 0) {
+        if (p->filename[1] && redir_out(&cfd[1], p->filename[1]) < 0) {
+            free(pid);
+            return -1;
+        }
+
+        if (p->filename[2] && redir_out(&cfd[2], p->filename[2]) < 0) {
             free(pid);
             return -1;
         }

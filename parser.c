@@ -3,8 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-static const char n_stok = 8;
-static const char *spec_tok[] = {"&&", "&", "|", "<", ">", "(", ")", ";"};
+static const char n_stok = 9;
+static const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";"};
 
 #define TOK_ARG -1
 #define TOK_AND 0
@@ -12,9 +12,10 @@ static const char *spec_tok[] = {"&&", "&", "|", "<", ">", "(", ")", ";"};
 #define TOK_PIPE 2
 #define TOK_RDR_IN 3
 #define TOK_RDR_OUT 4
-//#define TOK_OBRACK 5 //open bracket
-//#define TOK_CBRRACK 6 //close bracket
-#define TOK_SEMICOL 7
+#define TOK_RDR_ERR_OUT 5
+//#define TOK_OBRACK 6 //open bracket
+//#define TOK_CBRRACK 7 //close bracket
+#define TOK_SEMICOL 8
 
 char *error_str = "no error\n";
 
@@ -172,6 +173,22 @@ token_error:
     return -1;
 }
 
+int get_rdr_type(int token) {
+    int type = -1;
+    switch(token) {
+        case TOK_RDR_IN:
+            type = 0;
+            break;
+        case TOK_RDR_OUT:
+            type = 1;
+            break;
+        case TOK_RDR_ERR_OUT:
+            type = 2;
+            break;
+    }
+    return type;
+}
+
 int parse_command(const char *s, struct lcommand *cmd) {
     struct ltoken_t ltok = null_ltok;
     if (tokenize(s, &ltok))
@@ -195,13 +212,13 @@ int parse_command(const char *s, struct lcommand *cmd) {
         case TOK_AND: case TOK_SEMICOL:
             is_done = 1;
             break;
-        case TOK_RDR_IN: case TOK_RDR_OUT:
+        case TOK_RDR_IN: case TOK_RDR_OUT: case TOK_RDR_ERR_OUT:
             if (i + 1 >= ltok.n || ltok.tok[i+1].type != TOK_ARG) {
                 error_str = "Parser Error: Missing filename after redirection\n";
                 goto parse_error;
             }
 
-            int type = ltok.tok[i].type == TOK_RDR_OUT;
+            int type = get_rdr_type(ltok.tok[i].type);
 
             if (!c.filename[type]) {
                 ++i;
