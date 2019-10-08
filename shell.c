@@ -4,19 +4,37 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <signal.h>
-#include "command.h"
-#include "error.h"
 #include <unistd.h>
 
-#define SHELL_NAME "\x1B[38;5;2m\x1B[1mosh>\x1B[0m "
+#include "command.h"
+#include "error.h"
+#include "shell.h"
+
+#define PATH_MAX 1024
+
+void print_wd() {
+    char * wd = getcwd(NULL, PATH_MAX);
+    fputs("\x1B[38;5;3m", stdout);
+    fputs(wd, stdout);
+    fputs("\x1B[0m\n", stdout);
+    free(wd);
+}
+
+void print_prompt()
+{
+    print_wd();
+    fputs(SHELL_NAME, stdout);
+    fflush(stdout);
+}
 
 int running = 0;
 
 void handler(int sig) {
-    fputs("\n", stdout);
-
     if (!running) {
-        fputs(SHELL_NAME, stdout);
+        fputs("\n", stdout);
+        rl_on_new_line(); // Regenerate the prompt on a newline
+        rl_replace_line("", 0); // Clear the previous text
+        rl_redisplay();
     }
 }
 
@@ -79,12 +97,7 @@ int main()
     char *s;
     while (1)
     {
-        char * wd = getcwd(NULL, 1024);
-        fputs("\x1B[38;5;3m", stdout);
-        fputs(wd, stdout);
-        fputs("\x1B[0m\n", stdout);
-        free(wd);
-
+        print_wd();
         running = 0;
         s = readline(SHELL_NAME);
         running = 1;

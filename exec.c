@@ -12,22 +12,29 @@
 
 #include "command.h"
 #include "job.h"
+#include "shell.h"
 
 struct ljob_t job_table = {0,NULL};
 
 
 void sigchild_handler(int sig)
 {
+    int new_prompt = 0;
     int i;
     for (i = 0; i < job_table.cap; ++i)
         if (job_table.job[i].running) {
             struct job_t *job = &job_table.job[i];
             if (waitpid(job->pid, NULL, WNOHANG) >= 0) {
                 job->running = 0;
-                printf("[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
+                printf("\n[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
                 free(job->cmd);
+                new_prompt = 1;
             }
         }
+
+    if (new_prompt)
+        print_prompt();
+    
 }
 
 int shell_exit(char **args) {
