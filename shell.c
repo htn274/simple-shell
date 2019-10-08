@@ -29,12 +29,17 @@ void print_prompt()
 
 int running = 0;
 
+void interrupt_readline()
+{
+    rl_on_new_line(); // Regenerate the prompt on a newline
+    rl_redisplay();
+}
+
 void handler(int sig) {
     if (!running) {
         fputs("\n", stdout);
-        rl_on_new_line(); // Regenerate the prompt on a newline
         rl_replace_line("", 0); // Clear the previous text
-        rl_redisplay();
+        interrupt_readline();
     }
 }
 

@@ -32,8 +32,10 @@ void sigchild_handler(int sig)
             }
         }
 
-    if (new_prompt)
-        print_prompt();
+    if (new_prompt) {
+        print_wd();
+        interrupt_readline();
+    }
     
 }
 
