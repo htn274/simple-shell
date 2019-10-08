@@ -4,7 +4,7 @@
 #include "token.h"
 #include "error.h"
 
-void free_command(struct command *c) {
+void free_command(struct command_t *c) {
     int i;
     for (i = 0; i < c->argc; ++i)
         free(c->args[i]);
@@ -17,7 +17,7 @@ void free_command(struct command *c) {
     *c = null_cmd;
 }
 
-void free_lcommand(struct lcommand *c)
+void free_lcommand(struct lcommand_t *c)
 {
     int i;
     for (i = 0; i < c->n; ++i)
@@ -44,7 +44,50 @@ int get_rdr_type(int token) {
     return type;
 }
 
-int parse_command(const char *s, struct lcommand *cmd) {
+int str_cat(char **str, int n, char *arg) {
+    int l = strlen(arg);
+    *str = realloc(*str, (n + l + 2) * sizeof(char));
+    strcpy(*str + n, arg);
+    (*str)[n + l] = ' ';
+    return l + 1;
+}
+
+
+char *cmd_to_string(const struct command_t *cmd) {
+    int i;
+
+    int n = 0;
+    char *str = malloc(1);
+    for (i = 0; i < cmd->argc; ++i) {
+        char *arg = cmd->args[i];
+        n += str_cat(&str, n, arg);
+    }
+
+    if (cmd->filename[0]) {
+        n += str_cat(&str, n, "<");
+        n += str_cat(&str, n, cmd->filename[0]);
+    }
+
+    if (cmd->filename[1]) {
+        n += str_cat(&str, n, ">");
+        n += str_cat(&str, n, cmd->filename[1]);
+    }
+
+    if (cmd->filename[2]) {
+        n += str_cat(&str, n, "2>");
+        n += str_cat(&str, n, cmd->filename[2]);
+    }
+
+    if (cmd->async)
+        n += str_cat(&str, n, "&");
+
+    if (n)
+        str[n-1] = ';';
+    str[n] = '\0';
+    return str;
+}
+
+int parse_command(const char *s, struct lcommand_t *cmd) {
     struct ltoken_t ltok = null_ltok;
     if (tokenize(s, &ltok))
         return -1;
@@ -55,7 +98,7 @@ int parse_command(const char *s, struct lcommand *cmd) {
 
 
     *cmd = null_lcmd;
-    struct command c = null_cmd;
+    struct command_t c = null_cmd;
 
     int i;
     for (i = 0; i < ltok.n; ++i) {
@@ -107,7 +150,7 @@ int parse_command(const char *s, struct lcommand *cmd) {
             c.args[c.argc] = NULL;
             //add to head
             ++cmd->n;
-            cmd->c = realloc(cmd->c, sizeof(struct command) * cmd->n);
+            cmd->c = realloc(cmd->c, sizeof(struct command_t) * cmd->n);
             cmd->c[cmd->n-1] = c;
 
             c = null_cmd;

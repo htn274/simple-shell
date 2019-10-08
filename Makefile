@@ -1,4 +1,4 @@
-FILES = shell.c exec.c error.c token.c alias.c parser.c
+FILES = job.c shell.c exec.c error.c token.c alias.c parser.c
 
 all: shell.c
 	gcc -Wall -O2 -o shell $(FILES) -lreadline

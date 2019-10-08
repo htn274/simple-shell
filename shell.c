@@ -64,9 +64,12 @@ int normalize(char **cmd) {
     return rep;
 }
 
+
+
 int main()
 {
-    signal(SIGINT,handler);
+    signal(SIGINT, handler);
+    signal(SIGCHLD, sigchild_handler);
     
     set_alias("ls", "ls --color=auto");
     set_alias("grep", "grep --color=auto");
@@ -100,7 +103,7 @@ int main()
         }
 
         char *s2 = replace_env_var(s);
-        struct lcommand c;
+        struct lcommand_t c;
         if (parse_command(s2, &c))
             fputs(error_str, stderr);
         free(s2);
