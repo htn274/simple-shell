@@ -9,6 +9,7 @@
 #include "command.h"
 #include "error.h"
 #include "shell.h"
+#include "alias.h"
 
 #define PATH_MAX 1024
 

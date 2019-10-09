@@ -31,12 +31,7 @@ int exec_lcommand(struct lcommand_t cmd);
 int parse_command(const char *s, struct lcommand_t *cmd);
 char *cmd_to_string(const struct command_t *cmd);
 
-int set_alias(const char *alias, const char * cmd);
-int unset_alias(const char *alias);
-const char *find_alias(const char *alias);
 
-char *replace_env_var(char *s);
-
-void sigchild_handler(int sig);
+void sigchild_handler();
 
 #endif

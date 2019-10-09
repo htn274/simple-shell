@@ -1,4 +1,4 @@
-#include "command.h"
+#include "alias.h"
 #include "token.h"
 #include "error.h"
 #include <stdlib.h>
