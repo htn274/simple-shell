@@ -24,7 +24,7 @@ void sigchild_handler(int sig)
     for (i = 0; i < job_table.cap; ++i)
         if (job_table.job[i].running) {
             struct job_t *job = &job_table.job[i];
-            if (waitpid(job->pid, NULL, WNOHANG) >= 0) {
+            if (waitpid(job->pid, NULL, WNOHANG) > 0) {
                 job->running = 0;
                 printf("\n[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
                 free(job->cmd);
@@ -330,8 +330,10 @@ int exec_lcommand(struct lcommand_t cmd) {
         if (!p->pipe && !p->async && pid >= 0)
             waitpid(pid, NULL, 0);
 
-        if (p->pipe && !p->async && pid >= 0)
-            pipe_job.job[add_job(&pipe_job)].pid = pid;
+        if (p->pipe && !p->async && pid >= 0) {
+            int job_id = add_job(&pipe_job);
+            pipe_job.job[job_id].pid = pid;
+        }
 
         move_fd(cfd, nfd);
     }
