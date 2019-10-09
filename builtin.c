@@ -92,7 +92,7 @@ int alias(char **args) {
         fputs("alias error: Too few arguments\n", stderr);
         return -1;
     } else if (!args[2]) {
-        const char *cmd = find_alias(args[1]);
+        const char *cmd = get_alias(find_alias(args[1]));
         if (cmd)
             printf("alias %s='%s'\n", args[1], cmd);
         else

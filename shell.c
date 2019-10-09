@@ -38,7 +38,7 @@ void interrupt_readline()
 
 void handler(int sig) {
     if (!running) {
-        fputs("\n", stdout);
+        puts("");
         rl_replace_line("", 0); // Clear the previous text
         interrupt_readline();
     }

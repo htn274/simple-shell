@@ -8,8 +8,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-#include "error.h"
+#include <signal.h>
 
+#include "error.h"
 #include "command.h"
 #include "job.h"
 #include "shell.h"
@@ -27,7 +28,7 @@ void sigchild_handler()
             struct job_t *job = &job_table.job[i];
             if (waitpid(job->pid, NULL, WNOHANG) > 0) {
                 job->running = 0;
-                printf("\n[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
+                printf("[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
                 free(job->cmd);
                 new_prompt = 1;
             }
@@ -40,7 +41,7 @@ void sigchild_handler()
     
 }
 
-int fexec_cmd(struct command_t *cmd, const int fd[3], pid_t *pid, int p_stat)
+int fexec_cmd(struct command_t *cmd, const int fd[3], int p_stat, pid_t *pid)
 {
     char **args = cmd->args;
 
@@ -59,6 +60,9 @@ int fexec_cmd(struct command_t *cmd, const int fd[3], pid_t *pid, int p_stat)
     }
 
     if (p == 0) {
+        if (cmd->async)
+            signal(SIGINT, SIG_IGN); //won't catch signal when running async
+
         if (fd[0] >= 0) {
             if (dup2(fd[0], STDIN_FILENO) < 0) {
                 perror("Exec input redirect failed");
@@ -117,7 +121,6 @@ int fexec_cmd(struct command_t *cmd, const int fd[3], pid_t *pid, int p_stat)
         close(pfd[1]);
 
         *pid = p;
-
         return 0;
     }
 }
@@ -209,8 +212,7 @@ int exec_lcommand(struct lcommand_t cmd) {
             goto exec_fail;
 
         pid_t pid = -1;
-        fexec_cmd(p, cfd, &pid, bg_stat);
-
+        fexec_cmd(p, cfd, bg_stat, &pid);
 
         if (!p->pipe && !p->async && pid >= 0)
             waitpid(pid, NULL, 0);

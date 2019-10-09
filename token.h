@@ -11,6 +11,8 @@ struct token_t {
     char *val;
 };
 
+extern const struct token_t null_tok;
+
 struct ltoken_t {
     int n;
     struct token_t *tok;
@@ -21,8 +23,7 @@ extern const char n_stok;
 extern const char *spec_tok[];
 
 #define TOK_ARG -1 //arg without alias haizz
-#define TOK_ARG_ALIAS -2 //arg maybe with alias
-
+#define TOK_NULL -2 //arg maybe with alias
 #define TOK_AND 0
 #define TOK_ASYNC 1
 #define TOK_PIPE 2
@@ -32,6 +33,13 @@ extern const char *spec_tok[];
 //#define TOK_OBRACK 6 //open bracket
 //#define TOK_CBRRACK 7 //close bracket
 #define TOK_SEMICOL 8
+
+
+
+static inline int is_null_tok(const struct token_t tok) {
+    return (tok.type == TOK_NULL || (tok.type < 0 && !tok.val));
+}
+
 
 static inline struct token_t get_tok(int type)
 {
@@ -46,12 +54,6 @@ static inline struct token_t get_arg(char *arg)
     return tok;
 }
 
-
-static inline struct token_t get_arg_alias(char *arg)
-{
-    struct token_t tok = {TOK_ARG_ALIAS, arg};
-    return tok;
-}
 
 struct token_t clone_tok(const struct token_t tok);
 void free_tok(struct token_t *tok);

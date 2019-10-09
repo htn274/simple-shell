@@ -1,10 +1,13 @@
-#include "token.h"
-#include "error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
+#include "token.h"
+#include "alias.h"
+#include "error.h"
+
 const struct ltoken_t null_ltok = {0,0};
+const struct token_t null_tok = {TOK_NULL, NULL};
 
 const char n_stok = 9;
 const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";"};
@@ -36,14 +39,14 @@ struct token_t clone_tok(const struct token_t tok)
     return ctok;
 }
 
-void add_single_token(struct ltoken_t *ltok, const struct token_t tok)
+void add_token(struct ltoken_t *ltok, const struct token_t tok)
 {
+    if (is_null_tok(tok))
+        return;
+
     ++ltok->n;
     ltok->tok = realloc(ltok->tok, ltok->n * sizeof(struct token_t));
     ltok->tok[ltok->n-1] = tok;
-
-    if (tok.type == TOK_ARG_ALIAS)
-        ltok->tok[ltok->n-1].type = TOK_ARG;
 }
 
 //if t is prefix of s
@@ -58,89 +61,125 @@ static inline int compare_prefix(const char *s, const char *t) {
     return 0;
 }
 
-
-static inline int skip_space(const char *s, int i)
+static inline const char *skip_space(const char *s)
 {
-    while (s[i] && isspace(s[i]))
-        ++i;
+    while (*s && isspace(*s))
+        ++s;
 
-    return i;
+    return s;
 }
 
 //convert to token
-int tokenize(const char *s, struct ltoken_t *ltok)
+int tokenize(const char *cmd, struct ltoken_t *ltok)
 {
-    char *val = malloc((strlen(s) + 1) * sizeof(char));
+    struct subs {
+        const char *str;
+        int alias;
+
+        struct token_t tok_after;
+    };
+
+    //stack
+    int cap = 0; //capacity of stack
+    int top = 0; //top of stack
+    struct subs *stack = NULL;
+
+    #define push(str, id, tok) {if (top >= cap) {cap = top + 1; stack = realloc(stack, cap * sizeof(struct subs));}; stack[top++]= (struct subs){(str), (id), (tok)};}
+
+    push(cmd, -1, null_tok);
+
+    int val_cap = 100;
+    char *val = malloc(val_cap * sizeof(char)); //need to change after use stack
+
+    #define add_val(c) {if (j >= val_cap) {val_cap = j + 1; val = realloc(val, val_cap * sizeof(char));}; val[j++] = (c);}
 
     *ltok = null_ltok;
 
-    int i = 0;
+    char delim = ' ';
 
-    while (1) {
-        i = skip_space(s, i);
+    int plain = 1;
 
-        if (!s[i])
-            break;
+    while (top) {
+        int cur_top = top;
+        const char *s = skip_space(stack[top - 1].str);
+
+        if (!*s) {
+            add_token(ltok, stack[top - 1].tok_after);
+            set_alias_state(stack[top - 1].alias, 1);
+            --top;
+            continue;
+        }
 
         int j = 0;
-        char delim = ' ';
-
-        int plain = 1;
 
         while(1) {
             if (delim != ' ') {
-                if (!s[i]) {
-                    error_str = "Parse Error: Not closing \" or '\n";
-                    goto token_error;
-                } else if (s[i] == delim)
+                if (!*s)
+                    break;
+                else if (*s == delim)
                     delim = ' ';
                 else
-                    val[j++] = s[i];
+                    add_val(*s);
             } else {
                 int special = -1;
                 //checkfor special tok
                 for (int k = 0; k < n_stok; ++k) {
-                    int len = compare_prefix(s + i, spec_tok[k]);
+                    int len = compare_prefix(s, spec_tok[k]);
                     if (len) {
-                        i += len;
+                        s += len;
                         special = k;
                         break;
                     }
                 }
 
-                if (special >= 0 || !s[i] || isspace(s[i])) {
-                    if (j) {
-                        val[j++] = '\0';
-
-                        struct token_t tok;
-                        if (plain && ((!ltok->n) || ltok->tok[ltok->n-1].type != -1))
-                            tok = get_arg_alias(val);
-                        else
-                            tok = get_arg(val);
-
-                        add_token(ltok, tok);
+                if (special >= 0 || !*s || isspace(*s)) {
+                    add_val('\0');
+                    int alias_id;
+                    if (!val[0] || 
+                        !plain || 
+                        (ltok->n && ltok->tok[ltok->n-1].type < 0) || 
+                        (alias_id = find_alias(val)) < 0
+                    ) {
+                        if (!plain || val[0])
+                            add_token(ltok, get_arg(strdup(val)));
+    
+                        if (special >= 0)
+                            add_token(ltok, get_tok(special));
+                    } else {
+                        set_alias_state(alias_id, 0);
+                        push(get_alias(alias_id), 
+                                alias_id, 
+                                special >= 0 ? get_tok(special) : null_tok 
+                        );
                     }
 
-                    if (special >= 0)
-                        add_token(ltok, get_tok(special));
-
+                    plain = 1;
                     break;
                 }
 
-                if (s[i] == '"' || s[i] == '\'') {
-                    delim = s[i];
+                if (*s == '"' || *s == '\'') {
+                    delim = *s;
                     plain = 0;
                 } else
-                    val[j++] = s[i];
+                    add_val(*s);
             }
-            ++i;
-        };
+            ++s;
+        }
+
+        stack[cur_top - 1].str = s;
     }
 
+    if (delim != ' ') {
+        error_str = "Parse Error: Not closing \" or '\n";
+        goto token_error;
+    } 
+
+    free(stack);
     free(val);
     return 0;
 token_error:
     free_ltok(ltok);
+    free(stack);
     free(val);
     return -1;
 }

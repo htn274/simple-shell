@@ -31,7 +31,6 @@ int exec_lcommand(struct lcommand_t cmd);
 int parse_command(const char *s, struct lcommand_t *cmd);
 char *cmd_to_string(const struct command_t *cmd);
 
-
 void sigchild_handler();
 
 #endif
