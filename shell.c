@@ -65,8 +65,10 @@ int normalize(char **cmd) {
     int i = 0, j = 0;
     for (; s[i]; ++i) {
         if (s[i] == '!' && s[i+1] == '!') {
-            if (!prev)
+            if (!prev) {
+                free(new);
                 return -1;
+            }
 
             new = realloc(new, (j + n + 2) * sizeof(char));
             strcpy(new + j, prev);
@@ -112,6 +114,7 @@ int main()
             break;
 
         int r = normalize(&s);
+
         if (r == 1) {
             fputs(s, stdout);
             fputs("\n", stdout);
