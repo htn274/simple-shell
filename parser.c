@@ -13,6 +13,7 @@ void free_command(struct command_t *c) {
 
     free(c->filename[0]);
     free(c->filename[1]);
+    free(c->filename[2]);
 
     *c = null_cmd;
 }

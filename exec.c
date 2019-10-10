@@ -16,6 +16,8 @@
 #include "shell.h"
 #include "builtin.h"
 
+#define _close(fd) {if(fd >= 0) close(fd);}
+
 struct ljob_t job_table = {0,NULL};
 
 typedef int fd_list[3];
@@ -59,9 +61,9 @@ int pipe_next(fd_list fd) {
 }
 
 void close_fd(fd_list fd) {
-    close(fd[0]);
-    close(fd[1]);
-    close(fd[2]);
+    _close(fd[0]);
+    _close(fd[1]);
+    _close(fd[2]);
 }
 
 
@@ -114,7 +116,7 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, int p_stat, pid_t *pi
             _exit(1);     
         }
         
-        close(*nfd);
+        _close(*nfd);
         close_fd(fd);
 
         //read til eof
