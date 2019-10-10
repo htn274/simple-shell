@@ -131,11 +131,9 @@ int main()
             continue;
         }
 
-        char *s2 = replace_env_var(s);
         struct lcommand_t c;
-        if (parse_command(s2, &c))
+        if (parse_command(s, &c))
             fputs(error_str, stderr);
-        free(s2);
 
         if (c.n > 0) {
             add_history(s);

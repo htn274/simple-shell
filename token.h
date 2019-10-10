@@ -22,8 +22,10 @@ extern const struct ltoken_t null_ltok;
 extern const char n_stok;
 extern const char *spec_tok[];
 
-#define TOK_ARG -1 //arg without alias haizz
-#define TOK_NULL -2 //arg maybe with alias
+
+#define TOK_END -3 //only end stack
+#define TOK_DOLLAR -2
+#define TOK_ARG -1
 #define TOK_AND 0
 #define TOK_ASYNC 1
 #define TOK_PIPE 2
@@ -33,19 +35,22 @@ extern const char *spec_tok[];
 //#define TOK_OBRACK 6 //open bracket
 //#define TOK_CBRRACK 7 //close bracket
 #define TOK_SEMICOL 8
+#define TOK_SPACE 255
 
-
-
-static inline int is_null_tok(const struct token_t tok) {
-    return (tok.type == TOK_NULL || (tok.type < 0 && !tok.val));
+static inline int is_stop_tok(int type) {
+    return type >= 0;
 }
-
 
 static inline struct token_t get_tok(int type)
 {
+    if (type < 0)
+        return null_tok;
+
     struct token_t tok = {type, NULL};
     return tok;
 }
+
+int get_tok_len(int type);
 
 
 static inline struct token_t get_arg(char *arg)
