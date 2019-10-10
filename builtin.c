@@ -37,15 +37,9 @@ int cd(char **args) {
         res = chdir(getenv("HOME"));
     else if (args[2])
         fputs("cd error: Too many arguments\n", stderr);
-    else  {
-        if (args[1][0] == '~') {
-            res = chdir(getenv("HOME"));
-            args[1][0] = '.';
-        }
-        
-        if (res >= 0)
-            res = chdir(args[1]);
-    }
+    else  
+        res = chdir(args[1]);
+
     if (res < 0)
         perror("cd error");
 

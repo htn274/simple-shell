@@ -20,7 +20,7 @@ int get_tok_len(int type)
     if (type == TOK_END)
         return 0;
 
-    if (type == TOK_SPACE || type == TOK_DOLLAR)
+    if (type == TOK_SPACE || type == TOK_DOLLAR || type == TOK_TILDE)
         return 1;
     
     return strlen(spec_tok[type]);
@@ -55,7 +55,7 @@ struct token_t clone_tok(const struct token_t tok)
 
 void add_token(struct ltoken_t *ltok, const struct token_t tok)
 {
-    if (tok.type == TOK_SPACE)
+    if (tok.type == TOK_SPACE || tok.type == TOK_TILDE || tok.type == TOK_DOLLAR)
         return;
 
     ++ltok->n;
@@ -80,6 +80,12 @@ static inline int next_token(char const *s)
     if (isspace(*s))
         return TOK_SPACE;
 
+    if (*s == '~')
+        return TOK_TILDE;
+
+    if (*s == '$')
+        return TOK_DOLLAR;
+
     //checkfor special tok
     for (int k = 0; k < n_stok; ++k) {
         int len = compare_prefix(s, spec_tok[k]);
@@ -89,7 +95,7 @@ static inline int next_token(char const *s)
         }
     }
 
-    return -1;
+    return TOK_ARG;
 }
 
 //convert to token
@@ -141,7 +147,6 @@ int tokenize(const char *cmd, struct ltoken_t *ltok)
         while(*s) {
             if (aliasible && delim != '\'' && *s == '$') {
                 btok = TOK_DOLLAR; //Dollar sign
-                ++s;
                 break;
             }
 
@@ -152,7 +157,7 @@ int tokenize(const char *cmd, struct ltoken_t *ltok)
                     add_val(*s);
             } else {
                 btok = next_token(s);
-                if (btok >= 0)
+                if (btok != TOK_ARG)
                     break;
 
                 if (*s == '"' || *s == '\'') {
@@ -191,6 +196,7 @@ int tokenize(const char *cmd, struct ltoken_t *ltok)
         }
 
         if (btok == TOK_DOLLAR) {
+            ++s; //skip the dollar
             const char *s0 = s; 
             int n = 0;
             while (*s && isalnum(*s)) {
@@ -212,6 +218,16 @@ int tokenize(const char *cmd, struct ltoken_t *ltok)
                     plain = 0;
                     aliasible = 0;
                 }
+            }
+        } else if (btok == TOK_TILDE) {
+            ++s; //skip the tilde
+
+            if (plain && aliasible && j == 0) {
+                push(getenv("HOME"), -1);
+                plain = 0;
+                aliasible = 0;
+            } else {
+                add_val('~');
             }
         }
 

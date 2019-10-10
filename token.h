@@ -23,7 +23,8 @@ extern const char n_stok;
 extern const char *spec_tok[];
 
 
-#define TOK_END -3 //only end stack
+#define TOK_END -4 //only end stack
+#define TOK_TILDE -3
 #define TOK_DOLLAR -2
 #define TOK_ARG -1
 #define TOK_AND 0
