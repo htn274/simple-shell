@@ -61,10 +61,12 @@ int normalize(char **cmd) {
     char *s = *cmd;
     int rep = 0;
 
+    char delim = ' ';
+
     char *new = NULL;
     int i = 0, j = 0;
     for (; s[i]; ++i) {
-        if (s[i] == '!' && s[i+1] == '!') {
+        if (delim != '\'' && s[i] == '!' && s[i+1] == '!') {
             if (!prev) {
                 free(new);
                 return -1;
@@ -77,6 +79,11 @@ int normalize(char **cmd) {
 
             rep = 1;
         } else {
+            if (s[i] == delim)
+                delim = ' ';
+            else if (delim == ' ' && (s[i] == '"' || s[i] == '\''))
+                delim = s[i];
+
             new = realloc(new, (j + 2) * sizeof(char));
             new[j] = s[i];
             ++j;
