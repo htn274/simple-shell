@@ -41,7 +41,24 @@ void sigchild_handler()
     
 }
 
-int fexec_cmd(struct command_t *cmd, const int fd[3], int p_stat, pid_t *pid)
+int pipe_next(int fd[3]) {
+    if (fd[1] >= 0) {
+        fputs("Can't have two output\n", stderr);
+        return -1;
+    }
+
+    int pfd[2];
+    if (pipe(pfd) < 0) {
+        perror("Pipe failed");
+        return -1;
+    }
+
+    fd[1] = pfd[1];
+    return pfd[0];
+}
+
+//nfd is pipe out file description
+int fexec_cmd(struct command_t *cmd, int fd[3], int *nfd, int p_stat, pid_t *pid)
 {
     char **args = cmd->args;
 
@@ -50,8 +67,19 @@ int fexec_cmd(struct command_t *cmd, const int fd[3], int p_stat, pid_t *pid)
     }
 
     int pfd[2]; //pipe for communicate between child and parent
-    if (pipe(pfd) < 0)
+    if (pipe(pfd) < 0) {
         perror("Exec pipe failed");
+        return -1;
+    }
+
+    if (cmd->pipe) {
+        if (*nfd >= 0) {
+            fputs("Can't both pipe and redirect\n", stderr);
+            return -1;
+        }
+        if ((*nfd = pipe_next(fd)) < 0)
+            return -1;
+    }
 
     pid_t p = fork();
     if (p < 0) {
@@ -60,6 +88,8 @@ int fexec_cmd(struct command_t *cmd, const int fd[3], int p_stat, pid_t *pid)
     }
 
     if (p == 0) {
+        close(*nfd);
+
         if (cmd->async)
             signal(SIGINT, SIG_IGN); //won't catch signal when running async
 
@@ -84,16 +114,17 @@ int fexec_cmd(struct command_t *cmd, const int fd[3], int p_stat, pid_t *pid)
                 perror("Exec error output redirect failed");
                 _exit(1);     
             }
-            close(fd[1]);
+            close(fd[2]);
         }
 
         //read til eof
         char tmp;
         close(pfd[1]);
         if (read(pfd[0], &tmp, 1) != 0) {
-            fprintf(stderr, "Exec failed: pipe error\n");
+            perror("Exec failed: pipe error");
             _exit(1);
         }
+        close(pfd[0]);
 
         execvp(args[0], args);
         if (errno == ENOENT)
@@ -109,6 +140,9 @@ int fexec_cmd(struct command_t *cmd, const int fd[3], int p_stat, pid_t *pid)
         if (fd[1] >= 0)
             close(fd[1]);
 
+        if (fd[2] >= 0)
+            close(fd[2]);
+
         if (p_stat) {
             int job_id = get_empty_job(&job_table);
             printf("[%d] %d\n", job_id + 1, p);
@@ -117,8 +151,8 @@ int fexec_cmd(struct command_t *cmd, const int fd[3], int p_stat, pid_t *pid)
             job_table.job[job_id].cmd = cmd_to_string(cmd);
         }
 
-        close(pfd[0]);
         close(pfd[1]);
+        close(pfd[0]);
 
         *pid = p;
         return 0;
@@ -157,27 +191,6 @@ int redir_out(int *fd, char *file) {
     return 0;
 }
 
-int pipe_next(int cfd[3], int nfd[3]) {
-    if (cfd[1] >= 0) {
-        fputs("Can't have two output\n", stderr);
-        return -1;
-    }
-
-    if (nfd[0] >= 0) {
-        fputs("Can't have two input\n", stderr);
-        return -1;
-    }
-
-    int pfd[2];
-    if (pipe(pfd) < 0) {
-        perror("Pipe failed");
-        return -1;
-    }
-
-    cfd[1] = pfd[1];
-    nfd[0] = pfd[0]; 
-    return 0;
-}
 
 void move_fd(int cfd[3], int nfd[3]) {
     cfd[0] = nfd[0];
@@ -187,6 +200,11 @@ void move_fd(int cfd[3], int nfd[3]) {
     nfd[0] = nfd[1] = nfd[2] = -1;
 }
 
+void clear_fd(int fd[3]) {
+    close(fd[0]);
+    close(fd[1]);
+    close(fd[2]);
+}
 
 int exec_lcommand(struct lcommand_t cmd) {
     int cfd[3] = {-1, -1, -1};
@@ -208,11 +226,8 @@ int exec_lcommand(struct lcommand_t cmd) {
         if (p->filename[2] && redir_out(&cfd[2], p->filename[2]) < 0)
             goto exec_fail;
 
-        if (p->pipe && pipe_next(cfd, nfd) < 0)
-            goto exec_fail;
-
         pid_t pid = -1;
-        fexec_cmd(p, cfd, bg_stat, &pid);
+        fexec_cmd(p, cfd, &nfd[0], bg_stat, &pid);
 
         if (!p->pipe && !p->async && pid >= 0)
             waitpid(pid, NULL, 0);
@@ -231,6 +246,8 @@ int exec_lcommand(struct lcommand_t cmd) {
     free_ljob(&pipe_job);
     return 0;
 exec_fail:
+    clear_fd(cfd);
+    clear_fd(nfd);
     free_ljob(&pipe_job);
     return -1;
 }

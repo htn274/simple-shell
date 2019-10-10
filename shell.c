@@ -101,6 +101,7 @@ int normalize(char **cmd) {
 
 int main()
 {
+    signal(SIGPIPE, exit);
     signal(SIGINT, handler);
     signal(SIGCHLD, sigchild_handler);
     
