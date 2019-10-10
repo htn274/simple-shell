@@ -18,6 +18,7 @@
 
 struct ljob_t job_table = {0,NULL};
 
+typedef int fd_list[3];
 
 void sigchild_handler()
 {
@@ -41,7 +42,7 @@ void sigchild_handler()
     
 }
 
-int pipe_next(int fd[3]) {
+int pipe_next(fd_list fd) {
     if (fd[1] >= 0) {
         fputs("Can't have two output\n", stderr);
         return -1;
@@ -57,8 +58,15 @@ int pipe_next(int fd[3]) {
     return pfd[0];
 }
 
+void close_fd(fd_list fd) {
+    close(fd[0]);
+    close(fd[1]);
+    close(fd[2]);
+}
+
+
 //nfd is pipe out file description
-int fexec_cmd(struct command_t *cmd, int fd[3], int *nfd, int p_stat, pid_t *pid)
+int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, int p_stat, pid_t *pid)
 {
     char **args = cmd->args;
 
@@ -88,34 +96,26 @@ int fexec_cmd(struct command_t *cmd, int fd[3], int *nfd, int p_stat, pid_t *pid
     }
 
     if (p == 0) {
-        close(*nfd);
-
         if (cmd->async)
             signal(SIGINT, SIG_IGN); //won't catch signal when running async
 
-        if (fd[0] >= 0) {
-            if (dup2(fd[0], STDIN_FILENO) < 0) {
-                perror("Exec input redirect failed");
-                _exit(1);
-            }
-            close(fd[0]);
+        if (fd[0] >= 0 && dup2(fd[0], STDIN_FILENO) < 0) {
+            perror("Exec input redirect failed");
+            _exit(1);
         }
 
-        if (fd[1] >= 0) {
-            if (dup2(fd[1], STDOUT_FILENO) < 0) {
-                perror("Exec output redirect failed");
-                _exit(1);     
-            }
-            close(fd[1]);
+        if (fd[1] >= 0 && dup2(fd[1], STDOUT_FILENO) < 0) {
+            perror("Exec output redirect failed");
+            _exit(1);     
         }
 
-        if (fd[2] >= 0) {
-            if (dup2(fd[2], STDERR_FILENO) < 0) {
-                perror("Exec error output redirect failed");
-                _exit(1);     
-            }
-            close(fd[2]);
+        if (fd[2] >= 0 && dup2(fd[2], STDERR_FILENO) < 0) {
+            perror("Exec error output redirect failed");
+            _exit(1);     
         }
+        
+        close(*nfd);
+        close_fd(fd);
 
         //read til eof
         char tmp;
@@ -134,14 +134,7 @@ int fexec_cmd(struct command_t *cmd, int fd[3], int *nfd, int p_stat, pid_t *pid
 
         _exit(1); //error
     } else {
-        if (fd[0] >= 0)
-            close(fd[0]);
-        
-        if (fd[1] >= 0)
-            close(fd[1]);
-
-        if (fd[2] >= 0)
-            close(fd[2]);
+        close_fd(fd);
 
         if (p_stat) {
             int job_id = get_empty_job(&job_table);
@@ -192,7 +185,7 @@ int redir_out(int *fd, char *file) {
 }
 
 
-void move_fd(int cfd[3], int nfd[3]) {
+void move_fd(fd_list cfd, fd_list nfd) {
     cfd[0] = nfd[0];
     cfd[1] = nfd[1];
     cfd[2] = nfd[2];
@@ -200,15 +193,10 @@ void move_fd(int cfd[3], int nfd[3]) {
     nfd[0] = nfd[1] = nfd[2] = -1;
 }
 
-void clear_fd(int fd[3]) {
-    close(fd[0]);
-    close(fd[1]);
-    close(fd[2]);
-}
 
 int exec_lcommand(struct lcommand_t cmd) {
-    int cfd[3] = {-1, -1, -1};
-    int nfd[3] = {-1, -1, -1};
+    fd_list cfd = {-1, -1, -1};
+    fd_list nfd = {-1, -1, -1};
 
     struct ljob_t pipe_job = null_ljob;
 
@@ -246,8 +234,8 @@ int exec_lcommand(struct lcommand_t cmd) {
     free_ljob(&pipe_job);
     return 0;
 exec_fail:
-    clear_fd(cfd);
-    clear_fd(nfd);
+    close_fd(cfd);
+    close_fd(nfd);
     free_ljob(&pipe_job);
     return -1;
 }
