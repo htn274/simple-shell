@@ -1,158 +1,170 @@
 #include "command.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
 #include <string.h>
+#include <stdlib.h>
+#include "token.h"
+#include "error.h"
 
-void free_command(struct lcommand c) {
+void free_command(struct command_t *c) {
     int i;
-    for (i = 0; i < c.n; ++i)
-        free(c.c[i].args);
-    
-    free(c.c);
-    free(c.arg);
+    for (i = 0; i < c->argc; ++i)
+        free(c->args[i]);
+
+    free(c->args);
+
+    free(c->filename[0]);
+    free(c->filename[1]);
+    free(c->filename[2]);
+
+    *c = null_cmd;
 }
 
-void skip_space(char *s, int *x) {
-    int i = *x;
-
-    while (s[i] && isspace(s[i]))
-        ++i;
-
-    *x = i;
-}
-
-int split(char* s, int *x)
+void free_lcommand(struct lcommand_t *c)
 {
-    int i = *x;
-    int j = i;
-
-    char delim = ' ';
-
-    int plain = 1;
-
-    for (;s[i]; ++i) {
-        if (delim != ' ') {
-            if (s[i] == delim) 
-                delim = ' ';
-            else
-                s[j++] = s[i];
-            
-        } else {
-            if (isspace(s[i])) {
-                s[j++] = '\0';
-                delim = '\0';
-                ++i;
-                break;
-            } else if (s[i] == '"' || s[i] == '\'') {
-                plain = 0;
-                delim = s[i];
-            } else {
-                s[j++] = s[i];
-            }
-        }
-    };
-
-    if (delim == ' ' && !s[i]) {
-        s[j++] = '\0';
-        delim = '\0';
-    }
+    int i;
+    for (i = 0; i < c->n; ++i)
+        free_command(c->c + i);
     
-    if (delim != '\0')
-        return -1; //error
+    free(c->c);
 
-    *x = i;
-
-    skip_space(s, x);
-
-    return plain;
+    *c = null_lcmd;
 }
 
-struct lcommand parse_command(const char *s) {
-    int i = 0;
-    int pos = 0;
-    int argc = 0;
+int get_rdr_type(int token) {
+    int type = -1;
+    switch(token) {
+        case TOK_RDR_IN:
+            type = 0;
+            break;
+        case TOK_RDR_OUT:
+            type = 1;
+            break;
+        case TOK_RDR_ERR_OUT:
+            type = 2;
+            break;
+    }
+    return type;
+}
 
-    char *cmd = malloc((strlen(s) + 1) * sizeof(char));
-    strcpy(cmd, s);
+int str_cat(char **str, int n, char *arg) {
+    int l = strlen(arg);
+    *str = realloc(*str, (n + l + 2) * sizeof(char));
+    strcpy(*str + n, arg);
+    (*str)[n + l] = ' ';
+    return l + 1;
+}
 
-    skip_space(cmd, &pos);
 
+char *cmd_to_string(const struct command_t *cmd) {
+    int i;
 
-    struct lcommand res = null_lcmd;
-    res.arg = cmd;
-
-    if (cmd[pos] == '\0') {
-        free_command(res);
-        return null_lcmd;
+    int n = 0;
+    char *str = malloc(1);
+    for (i = 0; i < cmd->argc; ++i) {
+        char *arg = cmd->args[i];
+        n += str_cat(&str, n, arg);
     }
 
-    struct command c = null_cmd;
+    if (cmd->filename[0]) {
+        n += str_cat(&str, n, "<");
+        n += str_cat(&str, n, cmd->filename[0]);
+    }
 
-    do {
-        i = pos;
+    if (cmd->filename[1]) {
+        n += str_cat(&str, n, ">");
+        n += str_cat(&str, n, cmd->filename[1]);
+    }
 
-        int plain = split(cmd, &pos);
+    if (cmd->filename[2]) {
+        n += str_cat(&str, n, "2>");
+        n += str_cat(&str, n, cmd->filename[2]);
+    }
 
-        if (plain == -1) {
-            fputs("Parse Error: Not closing \" or '\n", stderr);
-            free_command(res);
-            return null_lcmd;
-        }
+    if (cmd->async)
+        n += str_cat(&str, n, "&");
 
-        int is_arg = !plain;
+    if (n)
+        str[n-1] = ';';
+    str[n] = '\0';
+    return str;
+}
+
+int parse_command(const char *s, struct lcommand_t *cmd) {
+    struct ltoken_t ltok = null_ltok;
+    if (tokenize(s, &ltok))
+        return -1;
+    
+    //add ending
+    if (ltok.n && ltok.tok[ltok.n-1].type != TOK_SEMICOL)
+        add_token(&ltok, get_tok(TOK_SEMICOL));
+
+
+    *cmd = null_lcmd;
+    struct command_t c = null_cmd;
+
+    int i;
+    for (i = 0; i < ltok.n; ++i) {
         int is_done = 0;
 
-        if (cmd[i] == '\0') {
-            is_arg = !plain;
+        switch (ltok.tok[i].type)
+        {
+        case TOK_ASYNC:
+            c.async = 1;
+            break;
+        case TOK_PIPE:
+            c.pipe = 1;
+        case TOK_AND: case TOK_SEMICOL:
             is_done = 1;
-        } else if (plain) {
-             if (strcmp(cmd + i, "|") == 0) {
-                c.pipe = 1;
-                is_done = 1;
-            } else if (strcmp(cmd + i, "&&") == 0) {
-                is_done = 1;
-            } else if (strcmp(cmd + i, "&") == 0) {
-                c.async = 1;
-            } else if (strcmp(cmd + i, "<") == 0) {
-                int j = pos;
-                split(cmd, &pos); //this is file :P
-                c.filename[0] = cmd + j;
-            } else if (strcmp(cmd + i, ">") == 0) {
-                int j = pos;
-                split(cmd, &pos); //this is file :P
-                c.filename[1] = cmd + j;
-            } else {
-                is_arg = 1;
+            break;
+        case TOK_RDR_IN: case TOK_RDR_OUT: case TOK_RDR_ERR_OUT:
+            if (i + 1 >= ltok.n || ltok.tok[i+1].type != TOK_ARG) {
+                error_str = "Parser Error: Missing filename after redirection\n";
+                goto parse_error;
             }
-        }
 
-        if (is_arg){
-            ++argc;
-            c.args = realloc(c.args, sizeof(char*) * (argc + 1));
-            c.args[argc - 1] = cmd + i;
+            int type = get_rdr_type(ltok.tok[i].type);
+
+            if (!c.filename[type]) {
+                ++i;
+                c.filename[type] = ltok.tok[i].val;
+                ltok.tok[i].val = NULL;
+                continue;
+            } else {
+                error_str = "Parser Error: Cannot redirect from/to 2 files\n";
+                goto parse_error;
+            }
+        case TOK_ARG:
+            ++c.argc;
+            c.args = realloc(c.args, sizeof(char*) * (c.argc + 1));
+            c.args[c.argc - 1] = ltok.tok[i].val;
+            ltok.tok[i].val = NULL;
+            break;
+        default:
+            break; 
         }
 
         if (is_done) {
             if (!c.args) {
-                fputs("Parse Error: Command with no arguments\n", stderr);
-                //free here
-                free_command(res);
-                return null_lcmd;
+                error_str = "Parse Error: Command with no arguments\n";
+                goto parse_error;
             }
 
-            c.argc = argc;
-            c.args[argc] = NULL;
-            argc = 0;
-
+            c.args[c.argc] = NULL;
             //add to head
-            ++res.n;
-            res.c = realloc(res.c, sizeof(struct command) * res.n);
-            res.c[res.n-1] = c;
+            ++cmd->n;
+            cmd->c = realloc(cmd->c, sizeof(struct command_t) * cmd->n);
+            cmd->c[cmd->n-1] = c;
 
             c = null_cmd;
         }
-    } while(cmd[i] != '\0');
-    return res;
+    }
+    
+    free_ltok(&ltok);
+    return 0;
+
+parse_error:
+    free_ltok(&ltok);
+    free_command(&c);
+    free_lcommand(cmd);
+    return -1;
 }
 

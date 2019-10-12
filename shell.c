@@ -4,19 +4,43 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <signal.h>
-#include "command.h"
 #include <unistd.h>
 
+#include "command.h"
+#include "error.h"
+#include "shell.h"
+#include "alias.h"
 
-#define SHELL_NAME "\x1B[38;5;2m\x1B[1mosh>\x1B[0m "
+#define PATH_MAX 1024
+
+void print_wd() {
+    char * wd = getcwd(NULL, PATH_MAX);
+    fputs("\x1B[38;5;3m", stdout);
+    fputs(wd, stdout);
+    fputs("\x1B[0m\n", stdout);
+    free(wd);
+}
+
+void print_prompt()
+{
+    print_wd();
+    fputs(SHELL_NAME, stdout);
+    fflush(stdout);
+}
 
 int running = 0;
 
-void handler(int sig) {
-    fputs("\n", stdout);
+void interrupt_readline()
+{
+    rl_on_new_line(); // Regenerate the prompt on a newline
+    rl_redisplay();
+}
 
+void handler(int sig) {
     if (!running) {
-        fputs(SHELL_NAME, stdout);
+        puts("");
+        rl_replace_line("", 0); // Clear the previous text
+        interrupt_readline();
     }
 }
 
@@ -26,7 +50,6 @@ int normalize(char **cmd) {
 
     char *prev;
     int n = 0;
-
     
     if (history_length == 0)
         prev = NULL;
@@ -34,15 +57,20 @@ int normalize(char **cmd) {
         prev = history_get(history_length)->line;
         n = strlen(prev);
     }
+
     char *s = *cmd;
     int rep = 0;
+
+    char delim = ' ';
 
     char *new = NULL;
     int i = 0, j = 0;
     for (; s[i]; ++i) {
-        if (s[i] == '!' && s[i+1] == '!') {
-            if (!prev)
+        if (delim != '\'' && s[i] == '!' && s[i+1] == '!') {
+            if (!prev) {
+                free(new);
                 return -1;
+            }
 
             new = realloc(new, (j + n + 2) * sizeof(char));
             strcpy(new + j, prev);
@@ -51,11 +79,17 @@ int normalize(char **cmd) {
 
             rep = 1;
         } else {
+            if (s[i] == delim)
+                delim = ' ';
+            else if (delim == ' ' && (s[i] == '"' || s[i] == '\''))
+                delim = s[i];
+
             new = realloc(new, (j + 2) * sizeof(char));
             new[j] = s[i];
             ++j;
         }
     }
+
     new[j] = '\0';
     free(s);
 
@@ -63,57 +97,23 @@ int normalize(char **cmd) {
     return rep;
 }
 
-char *replace_env_var(char *s) {
-    char *new = calloc(1, sizeof(char)); //empty string
-    int i = 0, j =0;;
 
-    for (; s[i]; ++i) {
-        if (s[i] == '$') {
-            int k = i + 1;
-            while (s[k] && isalnum(s[k])) {
-                ++k;
-            }
-
-            if (k > i + 1) {
-                char temp = s[k];
-                s[k] = '\0';
-                char *val = getenv(s + i + 1);
-                s[k] = temp;
-
-                if (val) {
-                    int lval = strlen(val);
-                    new = realloc(new, (j + lval + 1) * sizeof(char));
-                    strcpy(new + j, val);
-                    j += lval;
-                }
-
-                i = k - 1;
-                continue;
-            }
-        }
-
-        new = realloc(new, (j + 2) * sizeof(char));
-        new[j] = s[i];
-        ++j;
-    }
-
-    new[j] = '\0';
-    return new;
-}
 
 int main()
 {
-    signal(SIGINT,handler);
+    signal(SIGPIPE, exit);
+    signal(SIGINT, handler);
+    signal(SIGCHLD, sigchild_handler);
     
+    set_alias("ls", "ls --color=auto");
+    set_alias("grep", "grep --color=auto");
+    set_alias("l", "ls -lah");
+    set_alias("la", "ls -lAh");
+
     char *s;
     while (1)
     {
-        char * wd = getcwd(NULL, 1024);
-        fputs("\x1B[38;5;3m", stdout);
-        fputs(wd, stdout);
-        fputs("\x1B[0m\n", stdout);
-        free(wd);
-
+        print_wd();
         running = 0;
         s = readline(SHELL_NAME);
         running = 1;
@@ -122,6 +122,7 @@ int main()
             break;
 
         int r = normalize(&s);
+
         if (r == 1) {
             fputs(s, stdout);
             fputs("\n", stdout);
@@ -131,14 +132,14 @@ int main()
             continue;
         }
 
-        char *s2 = replace_env_var(s);
-        struct lcommand c = parse_command(s2);
-        free(s2);
+        struct lcommand_t c;
+        if (parse_command(s, &c))
+            fputs(error_str, stderr);
 
         if (c.n > 0) {
             add_history(s);
-            exec_command(c);
-            free_command(c);
+            exec_lcommand(c);
+            free_lcommand(&c);
         }
 
         free(s);

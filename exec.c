@@ -7,184 +7,46 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <signal.h>
 
+#include "error.h"
 #include "command.h"
+#include "job.h"
+#include "shell.h"
+#include "builtin.h"
 
-int shell_exit(char **args) {
-    if (args[1] && args[2]) {
-        fputs("exit error: Too many arguments\n", stderr);
-        return -1;
-    }
-    
-    if (args[1])
-        exit(atoi(args[1]));
-    else
-        exit(0);
-}
+#define _close(fd) {if(fd >= 0) close(fd);}
 
-int cd(char **args) {
-    int res = 0;
-    if (!args[1])
-        res = chdir(getenv("HOME"));
-    else if (args[2])
-        fputs("cd error: Too many arguments\n", stderr);
-    else  {
-        if (args[1][0] == '~') {
-            res = chdir(getenv("HOME"));
-            args[1][0] = '.';
-        }
-        
-        if (res >= 0)
-            res = chdir(args[1]);
-    }
-    if (res < 0)
-        perror("cd error");
+struct ljob_t job_table = {0,NULL};
 
-    return res;
-}
+typedef int fd_list[3];
 
-int set(char **args) {
-    if (!args[1] || !args[2]){
-        fputs("set error: Too few arguments\n", stderr);
-        return -1;
-    }
-    if (args[3]) {
-        fputs("set error: Too many arguments\n", stderr);
-        return -1;
-    }
-
-    if (setenv(args[1], args[2], 1) < 0) {
-        perror("set error");
-        return -1;
-    }
-    return 0;
-}
-
-int unset(char **args) {
-    if (!args[1]){
-        fputs("unset error: Too few arguments\n", stderr);
-        return -1;
-    }
-    if (args[2]) {
-        fputs("unset error: Too many arguments\n", stderr);
-        return -1;
-    }
-
-    if (unsetenv(args[1]) < 0) {
-        perror("unset error");
-        return -1;
-    }
-
-    return 0;
-}
-
-void extend_cmd(struct command *c){
-    if (strcmp(c->args[0], "ls")   == 0 ||
-        strcmp(c->args[0], "grep") == 0) 
-    {
-        int i;
-        ++c->argc;
-        c->args = realloc(c->args, (c->argc + 1) * sizeof(char *));
-        for (i = c->argc; i > 1; --i)
-            c->args[i] = c->args[i-1];
-    
-        c->args[1] = "--color=tty";
-    }
-}
-
-pid_t fexec_cmd(char **args, const int fd[2])
+void sigchild_handler()
 {
-    if (strcmp(args[0], "exit") == 0) {
-        shell_exit(args);
-        return -1;
-    } else if (strcmp(args[0], "cd") == 0) {
-        cd(args);
-        return -1;
-    } else if (strcmp(args[0], "set") == 0) {
-        set(args);
-        return -1;
-    } else if (strcmp(args[0], "unset") == 0) {
-        unset(args);
-        return -1;
-    }
-
-    pid_t p = vfork();
-    if (p < 0) {
-        perror("Exec fork failed");
-        return -1;
-    }
-
-    if (p == 0) {
-        if (fd[0] >= 0) {
-            if (dup2(fd[0], STDIN_FILENO) < 0) {
-                perror("Exec input redirect failed");
-                exit(1);
+    int new_prompt = 0;
+    int i;
+    for (i = 0; i < job_table.cap; ++i)
+        if (job_table.job[i].running) {
+            struct job_t *job = &job_table.job[i];
+            if (waitpid(job->pid, NULL, WNOHANG) > 0) {
+                job->running = 0;
+                printf("[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
+                free(job->cmd);
+                new_prompt = 1;
             }
-            close(fd[0]);
         }
 
-        if (fd[1] >= 0) {
-            if (dup2(fd[1], STDOUT_FILENO) < 0) {
-                perror("Exec output redirect failed");
-                exit(1);     
-            }
-            close(fd[1]);
-        }
+    if (new_prompt) {
+        print_wd();
+        interrupt_readline();
+    }
     
-        execvp(args[0], args);
-        perror("Exec failed");
-        exit(1); //error
-    } else {
-        if (fd[0] >= 0)
-            close(fd[0]);
-        
-        if (fd[1] >= 0)
-            close(fd[1]);
-
-        return p;
-    }
 }
 
-int redir_in(int fd[2], char *file) {
-    if (fd[0] >= 0) {
-        fputs("Can't have two input\n", stderr);
-        return -1;
-    }
-
-    fd[0] = open(file, O_RDONLY, 0);
-    if (fd[0] < 0)
-    {
-        perror("Open file to read failed");
-        return -1;
-    }
-
-    return 0;
-}
-
-int redir_out(int fd[2], char *file) {
-    const mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+int pipe_next(fd_list fd) {
     if (fd[1] >= 0) {
         fputs("Can't have two output\n", stderr);
-        return -1;
-    }
-
-    fd[1] = open(file, O_WRONLY | O_CREAT, mode);
-    if (fd[1] < 0)
-    {
-        perror("Open file to write failed");
-        return -1;
-    }
-    return 0;
-}
-
-int pipe_next(int cfd[2], int nfd[2]) {
-    if (cfd[1] >= 0) {
-        fputs("Can't have two output\n", stderr);
-        return -1;
-    }
-
-    if (nfd[0] >= 0) {
-        fputs("Can't have two input\n", stderr);
         return -1;
     }
 
@@ -194,51 +56,188 @@ int pipe_next(int cfd[2], int nfd[2]) {
         return -1;
     }
 
-    cfd[1] = pfd[1];
-    nfd[0] = pfd[0]; 
+    fd[1] = pfd[1];
+    return pfd[0];
+}
+
+void close_fd(fd_list fd) {
+    _close(fd[0]);
+    _close(fd[1]);
+    _close(fd[2]);
+}
+
+
+//nfd is pipe out file description
+int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, int p_stat, pid_t *pid)
+{
+    char **args = cmd->args;
+
+    if (exec_builtin(args, NULL)) {
+        return 0;
+    }
+
+    int pfd[2]; //pipe for communicate between child and parent
+    if (pipe(pfd) < 0) {
+        perror("Exec pipe failed");
+        return -1;
+    }
+
+    if (cmd->pipe) {
+        if (*nfd >= 0) {
+            fputs("Can't both pipe and redirect\n", stderr);
+            return -1;
+        }
+        if ((*nfd = pipe_next(fd)) < 0)
+            return -1;
+    }
+
+    pid_t p = fork();
+    if (p < 0) {
+        perror("Exec fork failed");
+        return -1;
+    }
+
+    if (p == 0) {
+        if (cmd->async)
+            signal(SIGINT, SIG_IGN); //won't catch signal when running async
+
+        if (fd[0] >= 0 && dup2(fd[0], STDIN_FILENO) < 0) {
+            perror("Exec input redirect failed");
+            _exit(1);
+        }
+
+        if (fd[1] >= 0 && dup2(fd[1], STDOUT_FILENO) < 0) {
+            perror("Exec output redirect failed");
+            _exit(1);     
+        }
+
+        if (fd[2] >= 0 && dup2(fd[2], STDERR_FILENO) < 0) {
+            perror("Exec error output redirect failed");
+            _exit(1);     
+        }
+        
+        _close(*nfd);
+        close_fd(fd);
+
+        //read til eof
+        char tmp;
+        close(pfd[1]);
+        if (read(pfd[0], &tmp, 1) != 0) {
+            perror("Exec failed: pipe error");
+            _exit(1);
+        }
+        close(pfd[0]);
+
+        execvp(args[0], args);
+        if (errno == ENOENT)
+            fprintf(stderr, "Exec failed: command not found (%s)\n", args[0]);
+        else
+            perror("Exec failed");
+
+        _exit(1); //error
+    } else {
+        close_fd(fd);
+
+        if (p_stat) {
+            int job_id = get_empty_job(&job_table);
+            printf("[%d] %d\n", job_id + 1, p);
+            job_table.job[job_id].pid = p;
+            job_table.job[job_id].running = 1;
+            job_table.job[job_id].cmd = cmd_to_string(cmd);
+        }
+
+        close(pfd[1]);
+        close(pfd[0]);
+
+        *pid = p;
+        return 0;
+    }
+}
+
+int redir_in(int *fd, char *file) {
+    if (*fd >= 0) {
+        fputs("Can't have two input\n", stderr);
+        return -1;
+    }
+
+    *fd = open(file, O_RDONLY, 0);
+    if (*fd < 0)
+    {
+        perror("Open file to read failed");
+        return -1;
+    }
+
     return 0;
 }
 
-void move_fd(int cfd[2], int nfd[2]) {
-    cfd[0] = nfd[0];
-    cfd[1] = nfd[1];
+int redir_out(int *fd, char *file) {
+    const mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    if (*fd >= 0) {
+        fputs("Can't have two output\n", stderr);
+        return -1;
+    }
 
-    nfd[0] = nfd[1] = -1;
+    *fd = open(file, O_WRONLY | O_CREAT, mode);
+    if (*fd < 0)
+    {
+        perror("Open file to write failed");
+        return -1;
+    }
+    return 0;
 }
 
 
-int exec_command(struct lcommand cmd) {
-    int cfd[2] = {-1, -1};
-    int nfd[2] = {-1, -1};
+void move_fd(fd_list cfd, fd_list nfd) {
+    cfd[0] = nfd[0];
+    cfd[1] = nfd[1];
+    cfd[2] = nfd[2];
 
-    pid_t *pid = malloc(cmd.n * sizeof(pid_t));
+    nfd[0] = nfd[1] = nfd[2] = -1;
+}
+
+
+int exec_lcommand(struct lcommand_t cmd) {
+    fd_list cfd = {-1, -1, -1};
+    fd_list nfd = {-1, -1, -1};
+
+    struct ljob_t pipe_job = null_ljob;
+
+    int bg_stat = (cmd.n == 1) && cmd.c[0].async; //print status
 
     int i;
     for (i = 0; i < cmd.n; ++i) {
-        struct command *p = cmd.c + i;
-        if (p->filename[0] && redir_in(cfd, p->filename[0]) < 0)
-            return -1;
+        struct command_t *p = cmd.c + i;
+        if (p->filename[0] && redir_in(&cfd[0], p->filename[0]) < 0)
+            goto exec_fail;
+            
+        if (p->filename[1] && redir_out(&cfd[1], p->filename[1]) < 0) 
+            goto exec_fail;
 
-        if (p->filename[1] && redir_out(cfd, p->filename[1]) < 0)
-            return -1;
+        if (p->filename[2] && redir_out(&cfd[2], p->filename[2]) < 0)
+            goto exec_fail;
 
-        if (p->pipe && pipe_next(cfd, nfd) < 0)
-            return -1;
+        pid_t pid = -1;
+        fexec_cmd(p, cfd, &nfd[0], bg_stat, &pid);
 
-        extend_cmd(p);
-        pid[i] = fexec_cmd(p->args, cfd);
+        if (!p->pipe && !p->async && pid >= 0)
+            waitpid(pid, NULL, 0);
 
-        if (!p->pipe && !p->async && pid[i] >= 0)
-            waitpid(pid[i], NULL, 0);
+        if (p->pipe && !p->async && pid >= 0) {
+            int job_id = add_job(&pipe_job);
+            pipe_job.job[job_id].pid = pid;
+        }
 
         move_fd(cfd, nfd);
     }
 
-    for (i = 0; i < cmd.n; ++i)
-        if (cmd.c[i].pipe && !cmd.c[i].async && pid[i] >= 0)
-            waitpid(pid[i], NULL, 0);
+    for (i = 0; i < pipe_job.cap; ++i)
+        waitpid(pipe_job.job[i].pid, NULL, 0);
 
-    free(pid);
-
+    free_ljob(&pipe_job);
     return 0;
+exec_fail:
+    close_fd(cfd);
+    close_fd(nfd);
+    free_ljob(&pipe_job);
+    return -1;
 }
