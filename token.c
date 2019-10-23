@@ -191,7 +191,7 @@ int tokenize(const char *cmd, struct ltoken_t *ltok)
 
         } else {
             set_alias_state(alias_id, 0);
-            push(get_alias(alias_id), alias_id);
+            push(get_alias_cmd(alias_id), alias_id);
             j = 0;
         }
 

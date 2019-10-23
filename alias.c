@@ -30,11 +30,21 @@ int find_alias(const char *alias) {
     return -1;
 }
 
-const char *get_alias(int id) {
+int get_alias_cnt() {
+    return n_alias;
+}
+
+const char *get_alias_cmd(int id) {
     if (id < 0 || id >= n_alias)
         return NULL;
     return dict[id].cmd;
 }
+const char *get_alias(int id) {
+    if (id < 0 || id >= n_alias)
+        return NULL;
+    return dict[id].alias;
+}
+
 int valid_name(const char *alias){
     int i;
     for(i = 0; alias[i]; ++i)

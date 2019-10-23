@@ -83,10 +83,13 @@ int unset(char **args) {
 
 int alias(char **args) {
     if (!args[1]){
-        fputs("alias error: Too few arguments\n", stderr);
-        return -1;
+        int i;
+        int n_alias = get_alias_cnt();
+        for (i = 0; i < n_alias; ++i) 
+            printf("alias %s='%s'\n", get_alias(i), get_alias_cmd(i));
+        return 0;
     } else if (!args[2]) {
-        const char *cmd = get_alias(find_alias(args[1]));
+        const char *cmd = get_alias_cmd(find_alias(args[1]));
         if (cmd)
             printf("alias %s='%s'\n", args[1], cmd);
         else
