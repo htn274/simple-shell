@@ -10,6 +10,7 @@
 #include "error.h"
 #include "shell.h"
 #include "alias.h"
+#include "read.h"
 
 #define PATH_MAX 1024
 
@@ -101,7 +102,6 @@ int normalize(char **cmd) {
 
 int main()
 {
-    signal(SIGPIPE, exit);
     signal(SIGINT, handler);
     signal(SIGCHLD, sigchild_handler);
     
@@ -113,9 +113,9 @@ int main()
     char *s;
     while (1)
     {
-        print_wd();
+        print_prompt();
         running = 0;
-        s = readline(SHELL_NAME);
+        s = read_cmd();
         running = 1;
 
         if (!s)
