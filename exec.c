@@ -44,6 +44,20 @@ void sigchild_handler()
     
 }
 
+void block_chld() {
+    sigset_t s;
+    sigemptyset(&s);
+    sigaddset(&s, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &s, NULL);
+}
+
+void unblock_chld() {
+    sigset_t s;
+    sigemptyset(&s);
+    sigaddset(&s, SIGCHLD);
+    sigprocmask(SIG_UNBLOCK, &s, NULL);
+}
+
 int pipe_next(fd_list fd) {
     if (fd[1] >= 0) {
         fputs("Can't have two output\n", stderr);
@@ -67,19 +81,13 @@ void close_fd(fd_list fd) {
 }
 
 
-//nfd is pipe out file description
-int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, int p_stat, pid_t *pid)
+//nfd is read pipe out file description// need to close in the child process 
+int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
 {
     char **args = cmd->args;
 
     if (exec_builtin(args, NULL)) {
         return 0;
-    }
-
-    int pfd[2]; //pipe for communicate between child and parent
-    if (pipe(pfd) < 0) {
-        perror("Exec pipe failed");
-        return -1;
     }
 
     if (cmd->pipe) {
@@ -91,9 +99,12 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, int p_stat, pid_t *pi
             return -1;
     }
 
+    block_chld();
+
     pid_t p = fork();
     if (p < 0) {
         perror("Exec fork failed");
+        job->pid = -1;
         return -1;
     }
 
@@ -119,14 +130,7 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, int p_stat, pid_t *pi
         _close(*nfd);
         close_fd(fd);
 
-        //read til eof
-        char tmp;
-        close(pfd[1]);
-        if (read(pfd[0], &tmp, 1) != 0) {
-            perror("Exec failed: pipe error");
-            _exit(1);
-        }
-        close(pfd[0]);
+        unblock_chld();
 
         execvp(args[0], args);
         if (errno == ENOENT)
@@ -138,18 +142,12 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, int p_stat, pid_t *pi
     } else {
         close_fd(fd);
 
-        if (p_stat) {
-            int job_id = get_empty_job(&job_table);
-            printf("[%d] %d\n", job_id + 1, p);
-            job_table.job[job_id].pid = p;
-            job_table.job[job_id].running = 1;
-            job_table.job[job_id].cmd = cmd_to_string(cmd);
+        if (job) {
+            job->pid = p;
+            job->running = 1;
+            job->cmd = cmd_to_string(cmd);
         }
 
-        close(pfd[1]);
-        close(pfd[0]);
-
-        *pid = p;
         return 0;
     }
 }
@@ -216,18 +214,31 @@ int exec_lcommand(struct lcommand_t cmd) {
         if (p->filename[2] && redir_out(&cfd[2], p->filename[2]) < 0)
             goto exec_fail;
 
-        pid_t pid = -1;
-        fexec_cmd(p, cfd, &nfd[0], bg_stat, &pid);
+        struct job_t job;
 
-        if (!p->pipe && !p->async && pid >= 0)
-            waitpid(pid, NULL, 0);
+        fexec_cmd(p, cfd, &nfd[0], &job);
+        move_fd(cfd, nfd);
 
-        if (p->pipe && !p->async && pid >= 0) {
-            int job_id = add_job(&pipe_job);
-            pipe_job.job[job_id].pid = pid;
+        if (job.pid < 0)
+            continue;
+
+        if (bg_stat) {
+            int job_id = get_empty_job(&job_table);
+            printf("[%d] %d\n", job_id + 1, job.pid);
+            job_table.job[job_id] = job;
         }
 
-        move_fd(cfd, nfd);
+        unblock_chld();
+
+        if (!p->async) {
+            if (!p->pipe)
+                waitpid(job.pid, NULL, 0);
+            else {
+                int job_id = add_job(&pipe_job);
+                pipe_job.job[job_id] = job;
+            }
+        }
+
     }
 
     for (i = 0; i < pipe_job.cap; ++i)
