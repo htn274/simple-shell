@@ -15,12 +15,11 @@
 #include "job.h"
 #include "shell.h"
 #include "builtin.h"
+#include "read.h"
 
 #define _close(fd) {if(fd >= 0) close(fd);}
 
 struct ljob_t job_table = {0,NULL};
-
-typedef int fd_list[3];
 
 void sigchild_handler()
 {
@@ -31,6 +30,7 @@ void sigchild_handler()
             struct job_t *job = &job_table.job[i];
             if (waitpid(job->pid, NULL, WNOHANG) > 0) {
                 job->running = 0;
+                new_line();
                 printf("[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
                 free(job->cmd);
                 new_prompt = 1;
@@ -38,8 +38,8 @@ void sigchild_handler()
         }
 
     if (new_prompt) {
-        print_wd();
-        interrupt_readline();
+        print_prompt();
+        //clear_buffer();
     }
     
 }
@@ -86,10 +86,6 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
 {
     char **args = cmd->args;
 
-    if (exec_builtin(args, NULL)) {
-        return 0;
-    }
-
     if (cmd->pipe) {
         if (*nfd >= 0) {
             fputs("Can't both pipe and redirect\n", stderr);
@@ -98,6 +94,17 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
         if ((*nfd = pipe_next(fd)) < 0)
             return -1;
     }
+
+    if (exec_builtin(args, NULL, fd)) {
+        if (job) {
+            job->pid = -1;
+            job->cmd = NULL;
+            job->running = 0;
+        }
+        
+        return 0;
+    }
+
 
     block_chld();
 
@@ -109,6 +116,7 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
     }
 
     if (p == 0) {
+        signal(SIGINT, SIG_DFL);
         if (cmd->async)
             signal(SIGINT, SIG_IGN); //won't catch signal when running async
 
@@ -225,7 +233,7 @@ int exec_lcommand(struct lcommand_t cmd) {
         if (bg_stat) {
             int job_id = get_empty_job(&job_table);
             printf("[%d] %d\n", job_id + 1, job.pid);
-            job_table.job[job_id] = job;
+            job_table.job[job_id] = job_dup(job);
         }
 
         unblock_chld();
@@ -235,10 +243,11 @@ int exec_lcommand(struct lcommand_t cmd) {
                 waitpid(job.pid, NULL, 0);
             else {
                 int job_id = add_job(&pipe_job);
-                pipe_job.job[job_id] = job;
+                pipe_job.job[job_id] = job_dup(job);
             }
         }
 
+        free_job(&job);
     }
 
     for (i = 0; i < pipe_job.cap; ++i)

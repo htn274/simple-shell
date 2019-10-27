@@ -6,12 +6,55 @@
 #include "builtin.h"
 #include "error.h"
 #include "alias.h"
+#include "hist.h"
 
-int exec_builtin(char **args, int *res)
+int exec_builtin(char **args, int *res, fd_list fd)
 {
     for (int i = 0; i < bin_cnt; ++i)
         if (strcmp(bin_fun[i].name, args[0]) == 0) {
+            //prepare fd
+            fflush(stdin);
+            fflush(stdout);
+            fflush(stderr);
+            int fd_in = dup(STDIN_FILENO);
+            int fd_out = dup(STDOUT_FILENO);
+            int fd_err = dup(STDERR_FILENO);
+            
+
+            if (fd[0] >= 0) {
+                dup2(fd[0], STDIN_FILENO);
+                close(fd[0]);
+            }
+
+            if (fd[1] >= 0) {
+                dup2(fd[1], STDOUT_FILENO);
+                close(fd[1]);
+            }
+
+            if (fd[2] >= 0) {
+                dup2(fd[2], STDERR_FILENO);
+                close(fd[2]);
+            }
+
+
             int r = bin_fun[i].fun(args);
+
+            fflush(stdin);
+            fflush(stdout);
+            fflush(stderr);
+            if (fd[0] >= 0)
+                dup2(fd_in, STDIN_FILENO);
+
+            if (fd[1] >= 0)
+                dup2(fd_out, STDOUT_FILENO);
+
+            if (fd[2] >= 0)
+                dup2(fd_err, STDERR_FILENO);
+
+            close(fd_in);
+            close(fd_out);
+            close(fd_err);
+
             if (res)
                 *res = r;
             return 1;
@@ -124,11 +167,26 @@ int unalias(char **args) {
 }
 
 
-int bin_cnt = 6;
+int history(char **args) {
+    if (args[1]){
+        fputs("history error: Too many arguments\n", stderr);
+        return -1;
+    }
+
+    for (int i = 0; i < hist_len(); ++i)
+        printf("%d\t%s\n", i + 1, get_history(i));
+    
+    return 0;
+}
+
 struct builtin_t bin_fun[] = {{"exit", shell_exit},
                               {"cd", cd},
                               {"set", set},
                               {"unset", unset},
                               {"alias", alias},
-                              {"unalias", unalias}
+                              {"unalias", unalias},
+                              {"history", history}
                               };
+
+int bin_cnt = sizeof(bin_fun)/ sizeof(bin_fun[0]);
+

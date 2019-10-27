@@ -9,6 +9,8 @@ struct builtin_t {
 extern int bin_cnt;
 extern struct builtin_t bin_fun[];
 
-int exec_builtin(char **args, int *res);
+typedef int fd_list[3];
+
+int exec_builtin(char **args, int *res, fd_list fd);
 
 #endif

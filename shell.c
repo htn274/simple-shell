@@ -1,61 +1,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <readline/readline.h>
-#include <readline/history.h>
 #include <signal.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "command.h"
 #include "error.h"
 #include "shell.h"
 #include "alias.h"
 #include "read.h"
+#include "hist.h"
 
-#define PATH_MAX 1024
-
-void print_wd() {
-    char * wd = getcwd(NULL, PATH_MAX);
-    fputs("\x1B[38;5;3m", stdout);
-    fputs(wd, stdout);
-    fputs("\x1B[0m\n", stdout);
-    free(wd);
-}
-
-void print_prompt()
-{
-    print_wd();
-    fputs(SHELL_NAME, stdout);
-    fflush(stdout);
-}
-
-int running = 0;
-
-void interrupt_readline()
-{
-    rl_on_new_line(); // Regenerate the prompt on a newline
-    rl_redisplay();
-}
-
-void handler(int sig) {
-    if (!running) {
-        puts("");
-        rl_replace_line("", 0); // Clear the previous text
-        interrupt_readline();
-    }
-}
+char *recent = NULL;
 
 int normalize(char **cmd) {
     if (**cmd == '\0')
         return 0;
 
-    char *prev;
+    const char *prev;
     int n = 0;
     
-    if (history_length == 0)
+    if (!recent)
         prev = NULL;
     else {
-        prev = history_get(history_length)->line;
+        prev = get_history(hist_len() - 1);
         n = strlen(prev);
     }
 
@@ -102,7 +71,7 @@ int normalize(char **cmd) {
 
 int main()
 {
-    signal(SIGINT, handler);
+    signal(SIGINT, SIG_IGN);
     signal(SIGCHLD, sigchild_handler);
     
     set_alias("ls", "ls --color=auto");
@@ -114,9 +83,7 @@ int main()
     while (1)
     {
         print_prompt();
-        running = 0;
         s = read_cmd();
-        running = 1;
 
         if (!s)
             break;

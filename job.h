@@ -25,4 +25,8 @@ static const struct ljob_t null_ljob = {0,NULL};
 int add_job(struct ljob_t *job_tab);
 int get_empty_job(struct ljob_t *job_tab);
 void free_ljob(struct ljob_t *job_tab);
+void free_job(struct job_t *job);
+struct job_t job_dup(struct job_t job);
+
+
 #endif
