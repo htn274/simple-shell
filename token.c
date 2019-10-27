@@ -118,7 +118,14 @@ int tokenize(const char *cmd, struct ltoken_t *ltok, int autodelim)
 
     int aliasible = 1;
 
+    char tmp[2] = " ";
+
     while (top) {
+        if (top == 1 && autodelim && delim != ' ') {
+            tmp[0] = delim;
+            push(tmp, -2);
+        }
+
         int cur_top = top;
 
         const char *s = stack[top - 1].str;
@@ -222,7 +229,7 @@ int tokenize(const char *cmd, struct ltoken_t *ltok, int autodelim)
         stack[cur_top - 1].str = s;
     }
 
-    if (!autodelim && delim != ' ') {
+    if (delim != ' ') {
         error_str = "Parse Error: Not closing \" or '\n";
         goto token_error;
     } 
