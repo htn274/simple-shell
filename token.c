@@ -63,18 +63,6 @@ void add_token(struct ltoken_t *ltok, const struct token_t tok)
     ltok->tok[ltok->n-1] = tok;
 }
 
-//if t is prefix of s
-static inline int compare_prefix(const char *s, const char *t) {
-    int i = 0;
-    while (s[i] && t[i] && s[i] == t[i])
-        ++i;
-
-    if (!t[i])
-        return i;
-    
-    return 0;
-}
-
 static inline int next_token(char const *s)
 {
     if (isspace(*s))
@@ -86,10 +74,10 @@ static inline int next_token(char const *s)
     if (*s == '$')
         return TOK_DOLLAR;
 
-    //checkfor special tok
+    //check for special tok
     for (int k = 0; k < n_stok; ++k) {
         int len = compare_prefix(s, spec_tok[k]);
-        if (len) {
+        if (len >= 0) {
             s += len;
             return k;
         }
@@ -99,7 +87,7 @@ static inline int next_token(char const *s)
 }
 
 //convert to token
-int tokenize(const char *cmd, struct ltoken_t *ltok)
+int tokenize(const char *cmd, struct ltoken_t *ltok, int autodelim)
 {
     struct subs {
         const char *str;
@@ -234,7 +222,7 @@ int tokenize(const char *cmd, struct ltoken_t *ltok)
         stack[cur_top - 1].str = s;
     }
 
-    if (delim != ' ') {
+    if (!autodelim && delim != ' ') {
         error_str = "Parse Error: Not closing \" or '\n";
         goto token_error;
     } 

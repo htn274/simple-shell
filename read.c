@@ -4,15 +4,18 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <dirent.h>
 
 #include "read.h"
 #include "hist.h"
+#include "token.h"
 
 #define KEY_NUL 0
 #define KEY_RTN 13
 #define KEY_ESC 27
 #define KEY_INT 3
 #define KEY_BCK 127
+#define KEY_TAB 9
 
 int is_raw = 0;
 struct termios orig_termios;
@@ -22,7 +25,9 @@ static int len = 0;
 static int cur = 0; //cursor position
 static char *input = NULL;
 
-#define PATH_MAX 1024
+void init_read() {
+    input = malloc(1);
+}
 
 char _read() {
     char c = '\0';
@@ -125,16 +130,28 @@ void enableRawMode() {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
+void finish() {
+    input[len] = '\0';
+}
+
+
+void show_text() {
+    finish();
+    _write(input, len);
+    int i;
+    for (i = len; i > cur; --i) {
+        _write("\b", 1);
+    }
+}
+
 void print_prompt() {
     print_wd();
     _write(SHELL_NAME, strlen(SHELL_NAME));
+    show_text();
     fflush(stdout);
 }
 
 void clear_buffer() {
-    if (!input)
-        input = malloc(1);
-
     len = cur = 0;
 }
 
@@ -213,9 +230,6 @@ void insert(char c) {
     ++cur;
 }
 
-void finish() {
-    input[len] = '\0';
-}
 
 void set_text(const char *s) {
     clear_text();
@@ -230,10 +244,96 @@ void set_text(const char *s) {
     }
 }
 
+static int print_all = 0;
+
+void auto_complete() {
+
+    char *s = NULL;
+    if (cur > 0 && !isspace(input[cur - 1])) {
+        struct ltoken_t ltok;
+
+        char temp = input[cur];
+        input[cur] = '\0';
+        tokenize(input, &ltok, 1);
+        input[cur] = temp;
+
+        if (ltok.n > 0 && ltok.tok[ltok.n-1].type == TOK_ARG) {
+            s = ltok.tok[ltok.n-1].val;
+            ltok.tok[ltok.n-1].val = 0;
+        } 
+
+        free_ltok(&ltok);
+    } 
+
+    if (!s) {
+        s = malloc(1);
+        s[0] = '\0';
+    }
+
+    int n = strlen(s);
+    int i = n - 1;
+    while (i >= 0 && s[i] != '/')
+        --i;
+
+    DIR *d;
+    struct dirent *dir;
+
+    if (i < 0) {
+        d = opendir(".");
+    } else if (i == 0) {
+        d = opendir("/");
+    } else {
+        s[i] = '\0';
+        d = opendir(s);
+    }
+
+    char *name = s + i + 1;
+
+    char *found = NULL;
+
+    if (print_all)
+        _write("\n", 1);
+
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if (compare_prefix(dir->d_name, name) >= 0) {
+                if (print_all) {
+                    _write(dir->d_name, strlen(dir->d_name));
+                    _write("\t", 1);
+                } else {
+                    if (found) {
+                        free(found);
+                        found = NULL;
+                        break;
+                    }
+
+                    found = strdup(dir->d_name);
+                }
+            }
+        }
+        closedir(d);
+    }
+
+    if (print_all) {
+        _write("\n", 1);
+        print_prompt();
+    } else if(found) {
+        for (i = strlen(name); found[i]; ++i)
+            insert(found[i]);
+        free(found);
+    }
+
+    free(s);
+
+
+}
+
 char *read_cmd() {
     enableRawMode();
 
     clear_buffer();
+
+    print_all = 0;
 
     int hist_id = hist_len();
 
@@ -241,6 +341,9 @@ char *read_cmd() {
 
     while (1) {
         char c = _read();
+
+        if (c != KEY_TAB)
+            print_all = 0;
 
         if (iscntrl(c)) {
             if (c == KEY_NUL) {
@@ -308,6 +411,11 @@ char *read_cmd() {
                 break;
             } else if (c == KEY_BCK) {
                 backspace();
+            } else if (c == KEY_TAB) {
+                //auto complete here
+                //basic auto complete
+                auto_complete();
+                print_all = 1;
             } else {
                 char num[20];
                 int l = sprintf(num,"(%d)",c);
@@ -324,5 +432,8 @@ char *read_cmd() {
 
     disableRawMode();
 
-    return strdup(input);
+    cur_input = strdup(input);
+    clear_buffer();
+
+    return cur_input;
 }

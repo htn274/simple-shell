@@ -60,6 +60,17 @@ static inline struct token_t get_arg(char *arg)
     return tok;
 }
 
+//check if t is the prefix of s. return t length if true (can be zero) -1 if false
+static inline int compare_prefix(const char *s, const char *t) {
+    int i = 0;
+    while (s[i] && t[i] && s[i] == t[i])
+        ++i;
+
+    if (!t[i])
+        return i;
+    
+    return -1;
+}
 
 struct token_t clone_tok(const struct token_t tok);
 void free_tok(struct token_t *tok);
@@ -67,6 +78,6 @@ void free_ltok(struct ltoken_t *ltok);
 void add_single_token(struct ltoken_t *ltok, const struct token_t tok);
 void add_token(struct ltoken_t *ltok, const struct token_t tok); //can have token alias
 
-int tokenize(const char *s, struct ltoken_t *ltok);
+int tokenize(const char *s, struct ltoken_t *ltok, int autodelim);
 
 #endif

@@ -90,7 +90,7 @@ char *cmd_to_string(const struct command_t *cmd) {
 
 int parse_command(const char *s, struct lcommand_t *cmd) {
     struct ltoken_t ltok = null_ltok;
-    if (tokenize(s, &ltok))
+    if (tokenize(s, &ltok, 0))
         return -1;
     
     //add ending

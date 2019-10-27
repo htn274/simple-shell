@@ -21,7 +21,7 @@ int normalize(char **cmd) {
     const char *prev;
     int n = 0;
     
-    if (!recent)
+    if (!hist_len())
         prev = NULL;
     else {
         prev = get_history(hist_len() - 1);
@@ -78,6 +78,8 @@ int main()
     set_alias("grep", "grep --color=auto");
     set_alias("l", "ls -lah");
     set_alias("la", "ls -lAh");
+
+    init_read();
 
     char *s;
     while (1)
