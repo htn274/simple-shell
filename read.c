@@ -244,9 +244,98 @@ void set_text(const char *s) {
     }
 }
 
-static int print_all = 0;
+//find common prefix of s and t return the length of the prefix
+int common_prefix(char *s, char *t) {
+    int i = 0;
+    while (s[i] && t[i] && s[i] == t[i])
+        ++i;
+    
+    return i;
+}
 
-void auto_complete() {
+char *find_extension(const char *dir_path, const char *prefix) {
+    DIR *d = opendir(dir_path);
+
+    if (!d)
+        return NULL;
+
+    char *found = NULL;
+
+    struct dirent *dir;
+    while ((dir = readdir(d)) != NULL) {
+        if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
+            continue;
+
+        if (compare_prefix(dir->d_name, prefix) >= 0) {
+            if (found)
+                //find common prefix
+                found[common_prefix(found, dir->d_name)] = '\0';
+            else
+                found = strdup(dir->d_name);
+        }
+    }
+    closedir(d);
+
+    return found;
+}
+
+int compare(const void *a, const void *b) {
+    return strcmp(a, b) > 0;
+}
+
+char **find_all_extension(const char *dir_path, const char *prefix) {
+    DIR *d = opendir(dir_path);
+
+    if (!d)
+        return NULL;
+
+    int len = 0;
+    char **list = NULL;
+
+    struct dirent *dir;
+    while ((dir = readdir(d)) != NULL) {
+        if (compare_prefix(dir->d_name, prefix) >= 0) {
+            ++len;
+            list = realloc(list, (len + 1) * sizeof(list[0]));
+            list[len - 1] = strdup(dir->d_name);
+        }
+    }
+
+    if (!list)
+        return list;
+
+    //sort
+    list[len] = NULL;
+    //qsort(list, len, sizeof(list[0]), compare);
+    closedir(d);
+
+    return list;
+}
+
+void show_table(char **list) {
+    _write("\n", 1);
+    if (!list)
+        return;
+    int i;
+    for (i = 0; list[i]; ++i) {
+        _write(list[i], strlen(list[i]));
+        _write("\t", 1);
+    }
+    _write("\n", 1);
+}
+
+void free_list(char **list) {
+    if (!list)
+        return;
+
+    int i;
+    for (i = 0; list[i]; ++i)
+        free(list[i]);
+
+    free(list);
+}
+
+void auto_complete(int double_tab) {
 
     char *s = NULL;
     if (cur > 0 && !isspace(input[cur - 1])) {
@@ -275,57 +364,34 @@ void auto_complete() {
     while (i >= 0 && s[i] != '/')
         --i;
 
-    DIR *d;
-    struct dirent *dir;
+    char *dir_path = NULL;
 
     if (i < 0) {
-        d = opendir(".");
+        dir_path = ".";
     } else if (i == 0) {
-        d = opendir("/");
+        dir_path = "/";
     } else {
         s[i] = '\0';
-        d = opendir(s);
+        dir_path = s;
     }
 
-    char *name = s + i + 1;
+    char *prefix= s + i + 1;
 
-    char *found = NULL;
-
-    if (print_all)
-        _write("\n", 1);
-
-    if (d) {
-        while ((dir = readdir(d)) != NULL) {
-            if (compare_prefix(dir->d_name, name) >= 0) {
-                if (print_all) {
-                    _write(dir->d_name, strlen(dir->d_name));
-                    _write("\t", 1);
-                } else {
-                    if (found) {
-                        free(found);
-                        found = NULL;
-                        break;
-                    }
-
-                    found = strdup(dir->d_name);
-                }
-            }
-        }
-        closedir(d);
-    }
-
-    if (print_all) {
-        _write("\n", 1);
+    if (double_tab) {
+        char ** ext = find_all_extension(dir_path, prefix);
+        show_table(ext);
+        free_list(ext);
         print_prompt();
-    } else if(found) {
-        for (i = strlen(name); found[i]; ++i)
-            insert(found[i]);
-        free(found);
+    } else {
+        char *ext = find_extension(dir_path, prefix);
+        if (ext) {
+            for (i = strlen(prefix); ext[i]; ++i)
+                insert(ext[i]);
+            free(ext);
+        }
     }
 
     free(s);
-
-
 }
 
 char *read_cmd() {
@@ -333,7 +399,7 @@ char *read_cmd() {
 
     clear_buffer();
 
-    print_all = 0;
+    int double_tab = 0;
 
     int hist_id = hist_len();
 
@@ -343,7 +409,7 @@ char *read_cmd() {
         char c = _read();
 
         if (c != KEY_TAB)
-            print_all = 0;
+            double_tab = 0;
 
         if (iscntrl(c)) {
             if (c == KEY_NUL) {
@@ -412,10 +478,8 @@ char *read_cmd() {
             } else if (c == KEY_BCK) {
                 backspace();
             } else if (c == KEY_TAB) {
-                //auto complete here
-                //basic auto complete
-                auto_complete();
-                print_all = 1;
+                auto_complete(double_tab);
+                double_tab = 1;
             } else {
                 char num[20];
                 int l = sprintf(num,"(%d)",c);
