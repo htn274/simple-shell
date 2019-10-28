@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <dirent.h>
+#include <sys/ioctl.h>
 
 #include "read.h"
 #include "hist.h"
@@ -16,6 +17,26 @@
 #define KEY_INT 3
 #define KEY_BCK 127
 #define KEY_TAB 9
+
+struct lstring_t {
+    char **str;
+    int len;
+};
+
+void free_lstring(struct lstring_t *list) {
+    if (!list || !list->str)
+        return;
+
+    int i;
+    for (i = 0; i < list->len; ++i)
+        free(list->str[i]);
+
+    free(list->str);
+    list->str = NULL;
+    list->len = 0;
+}
+
+static const struct lstring_t null_lstring = {NULL, 0};
 
 int is_raw = 0;
 struct termios orig_termios;
@@ -253,13 +274,20 @@ int common_prefix(char *s, char *t) {
     return i;
 }
 
-char *find_extension(const char *dir_path, const char *prefix) {
+int compare(const void *a, const void *b) {
+    const char * const*x = a;
+    const char * const*y = b;
+    return strcmp(*x, *y) > 0;
+}
+
+struct lstring_t find_all_extension(const char *dir_path, const char *prefix, int sort) {
     DIR *d = opendir(dir_path);
 
     if (!d)
-        return NULL;
+        return null_lstring;
 
-    char *found = NULL;
+    int len = 0;
+    char **list = NULL;
 
     struct dirent *dir;
     while ((dir = readdir(d)) != NULL) {
@@ -267,72 +295,94 @@ char *find_extension(const char *dir_path, const char *prefix) {
             continue;
 
         if (compare_prefix(dir->d_name, prefix) >= 0) {
-            if (found)
-                //find common prefix
-                found[common_prefix(found, dir->d_name)] = '\0';
-            else
-                found = strdup(dir->d_name);
-        }
-    }
-    closedir(d);
-
-    return found;
-}
-
-int compare(const void *a, const void *b) {
-    return strcmp(a, b) > 0;
-}
-
-char **find_all_extension(const char *dir_path, const char *prefix) {
-    DIR *d = opendir(dir_path);
-
-    if (!d)
-        return NULL;
-
-    int len = 0;
-    char **list = NULL;
-
-    struct dirent *dir;
-    while ((dir = readdir(d)) != NULL) {
-        if (compare_prefix(dir->d_name, prefix) >= 0) {
             ++len;
             list = realloc(list, (len + 1) * sizeof(list[0]));
-            list[len - 1] = strdup(dir->d_name);
+
+            int d_len = strlen(dir->d_name);
+            list[len - 1] = malloc(d_len + 2);
+            strcpy(list[len - 1], dir->d_name);
+
+            if (dir->d_type == DT_DIR) {
+                list[len-1][d_len] = '/';
+            } else {
+                list[len-1][d_len] = ' ';
+            }
+
+            list[len-1][d_len+1] = '\0';
+
         }
     }
 
     if (!list)
-        return list;
+        return null_lstring;
 
     //sort
     list[len] = NULL;
-    //qsort(list, len, sizeof(list[0]), compare);
+
+    if (sort)
+        qsort(list, len, sizeof(list[0]), compare);
+
     closedir(d);
 
-    return list;
+    return (struct lstring_t){list, len};
 }
 
-void show_table(char **list) {
+
+char *find_extension(const char *dir_path, const char *prefix) {
+    struct lstring_t ext = find_all_extension(dir_path, prefix, 1);
+    if (!ext.len)
+        return NULL;
+
+    int pref = common_prefix(ext.str[0], ext.str[ext.len - 1]);
+
+    char *res = malloc(pref + 1);
+    memcpy(res, ext.str[0], pref);
+    res[pref] = '\0';
+
+    free_lstring(&ext);
+
+    return res;
+}
+
+int get_term_width() {
+    struct winsize w;
+    ioctl(0, TIOCGWINSZ, &w);
+    return w.ws_col;
+}
+
+void show_table(const struct lstring_t *list) {
     _write("\n", 1);
-    if (!list)
+    if (!list || !list->str)
         return;
     int i;
-    for (i = 0; list[i]; ++i) {
-        _write(list[i], strlen(list[i]));
-        _write("\t", 1);
+
+    int max_len = 0;
+    for (i = 0; i < list->len; ++i) {
+        int len = strlen(list->str[i]);
+        if (len > max_len)
+            max_len = len;
     }
+
+    max_len += 1; //margin
+
+    int col = get_term_width() / max_len;
+    if (!col)
+        col = 1;
+
+    for (i = 0; i < list->len; ++i) {
+        int len = strlen(list->str[i]);
+        _write(list->str[i], len);
+        
+        if ((i + 1) % col == 0) {
+            _write("\n",1);
+        } else {
+            int j;
+            for (j = 0; j < max_len - len; ++j)
+                _write(" ", 1);
+        }
+    }
+
     _write("\n", 1);
-}
-
-void free_list(char **list) {
-    if (!list)
-        return;
-
-    int i;
-    for (i = 0; list[i]; ++i)
-        free(list[i]);
-
-    free(list);
 }
 
 void auto_complete(int double_tab) {
@@ -378,9 +428,9 @@ void auto_complete(int double_tab) {
     char *prefix= s + i + 1;
 
     if (double_tab) {
-        char ** ext = find_all_extension(dir_path, prefix);
-        show_table(ext);
-        free_list(ext);
+        struct lstring_t ext = find_all_extension(dir_path, prefix, 1);
+        show_table(&ext);
+        free_lstring(&ext);
         print_prompt();
     } else {
         char *ext = find_extension(dir_path, prefix);
