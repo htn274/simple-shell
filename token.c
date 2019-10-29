@@ -90,6 +90,9 @@ void add_token(struct ltoken_t *ltok, struct token_t tok)
 
         str_merge(&last_tok->val, tok.val);
     } else {
+        if (tok.type == TOK_SPLIT && !is_arg_token(*last_tok))
+            return; //only add tok_split  arg token
+
         ++ltok->n;
         ltok->tok = realloc(ltok->tok, ltok->n * sizeof(struct token_t));
         ltok->tok[ltok->n-1] = tok;
