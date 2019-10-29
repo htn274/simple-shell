@@ -1,34 +1,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <assert.h>
 
 #include "token.h"
 #include "alias.h"
 #include "error.h"
 
-const struct ltoken_t null_ltok = {0,0};
-const struct token_t null_tok = {TOK_ARG, NULL};
+const struct ltoken_t null_ltok = {0, MODE_HEAD_FLAG, 0};
 
-const char n_stok = 9;
-const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";"};
-
-int get_tok_len(int type)
-{
-    if (type == TOK_ARG)
-        return -1;
-
-    if (type == TOK_END)
-        return 0;
-
-    if (type == TOK_SPACE || type == TOK_DOLLAR || type == TOK_TILDE)
-        return 1;
-    
-    return strlen(spec_tok[type]);
-}
+const char n_stok = 10;
+const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";", "~"};
 
 void free_tok(struct token_t *tok)
 {
     free(tok->val);
+    tok->val = NULL;
 }
 
 void free_ltok(struct ltoken_t *ltok)
@@ -53,193 +40,177 @@ struct token_t clone_tok(const struct token_t tok)
     return ctok;
 }
 
-void add_token(struct ltoken_t *ltok, const struct token_t tok)
-{
-    if (tok.type == TOK_SPACE || tok.type == TOK_TILDE || tok.type == TOK_DOLLAR)
+void update_mode(struct ltoken_t *ltok, const struct token_t tok) {
+    switch (tok.type) {
+        case TOK_SPLIT:
+            if ((ltok->mode & MODE_HEAD_FLAG) && is_arg_token(*get_last_tok(ltok))) //currently head and have typed
+                ltok->mode &= ~MODE_HEAD_FLAG;
+            break;
+        case TOK_SEMICOL: case TOK_AND: // case TOK_ASYNC:
+            ltok->mode |= MODE_HEAD_FLAG;
+            break;
+        case TOK_SQU:
+            ltok->mode ^= MODE_SQUOTE_FLAG;
+            break;
+        case TOK_DQU:
+            ltok->mode ^= MODE_DQUOTE_FLAG;
+            break;
+        case TOK_ARG: case TOK_NARG:
+            break;
+    }
+}
+
+void remove_last_token(struct ltoken_t *ltok) {
+    if (!ltok->n)
         return;
 
-    ++ltok->n;
-    ltok->tok = realloc(ltok->tok, ltok->n * sizeof(struct token_t));
-    ltok->tok[ltok->n-1] = tok;
+    free_tok(&ltok->tok[--ltok->n]);
 }
 
-static inline int next_token(char const *s)
+void str_merge(char **a, char *b) {
+    int lena = strlen(*a);
+    int len = lena + strlen(b);
+    *a = realloc(*a, len + 1);
+
+    strcpy(*a + lena, b);
+    free(b);
+}
+
+void add_token(struct ltoken_t *ltok, struct token_t tok)
 {
-    if (isspace(*s))
-        return TOK_SPACE;
+    update_mode(ltok, tok);
 
-    if (*s == '~')
-        return TOK_TILDE;
+    if (is_quote_token(tok))
+        tok = get_tok_arg(TOK_NARG, calloc(1, 1));
 
-    if (*s == '$')
-        return TOK_DOLLAR;
+    struct token_t *last_tok = get_last_tok(ltok);
+    if (is_arg_token(tok) && is_arg_token(*last_tok)) {
+        if (tok.type == TOK_NARG)
+            last_tok->type = TOK_NARG;
 
+        str_merge(&last_tok->val, tok.val);
+    } else {
+        ++ltok->n;
+        ltok->tok = realloc(ltok->tok, ltok->n * sizeof(struct token_t));
+        ltok->tok[ltok->n-1] = tok;
+    }
+}
+
+static inline struct token_t get_tok_char(int type, char t)
+{
+    assert(type == TOK_ARG || type == TOK_NARG);
+
+    char *s = calloc(2, sizeof(t));
+    s[0] = t;
+    s[1] = '\0';
+
+    struct token_t tok = {type, s};
+    return tok;
+}
+
+
+static struct token_t get_dollar_token(const char ** s) {
+    int len = 0;
+    while (isalnum((*s)[len]))
+        ++len;
+
+    char *arg = malloc(len + 1);
+    memcpy(arg, *s, len);
+    arg[len] = '\0';
+
+    *s += len;
+    return get_tok_arg(TOK_DOLLAR, arg);
+}
+
+static struct token_t next_token(const char **s, int mode)
+{
+    if (!*s || !**s)
+        return get_tok(TOK_END);
+
+    int dtok_arg = (mode & MODE_NALIAS_FLAG)? TOK_NARG : TOK_ARG; //default tok arg
+    char t = **s;
+    ++(*s);
+
+    if (isspace(t) && is_mode_normal(mode)) {
+        while (isspace(**s))
+            ++*s;
+        return get_tok(TOK_SPLIT);
+    }
+
+    if (!(mode & (MODE_SQUOTE_FLAG | MODE_NALIAS_FLAG)) && t == '$')
+        return get_dollar_token(s);
+
+    if (t == '"' && (is_mode_normal(mode) || (mode & MODE_DQUOTE_FLAG)) )
+        return get_tok(TOK_DQU);
+
+    if (t == '\'' && (is_mode_normal(mode) || (mode & MODE_SQUOTE_FLAG)) )
+        return get_tok(TOK_SQU);
+
+    if (mode & MODE_SQUOTE_FLAG)
+        return get_tok_char(TOK_NARG, t); //get the current
+    
+    if (mode & MODE_DQUOTE_FLAG)
+        return get_tok_char(dtok_arg, t);
+
+    --(*s);
     //check for special tok
     for (int k = 0; k < n_stok; ++k) {
-        int len = compare_prefix(s, spec_tok[k]);
-        if (len >= 0) {
-            s += len;
-            return k;
+        int len = compare_prefix(*s, spec_tok[k]);
+        if (len > 0) {
+            *s += len;
+            return get_tok(k);
         }
     }
 
-    return TOK_ARG;
+    ++(*s);
+    return get_tok_char(dtok_arg, t);
 }
 
-//convert to token
-int tokenize(const char *cmd, struct ltoken_t *ltok, int autodelim)
+//convert to token and append to ltok
+void tokenize(const char *cmd, struct ltoken_t *ltok)
 {
-    struct subs {
-        const char *str;
-        int alias;
-    };
+    const char *s = cmd;
+    struct token_t btok;
 
-    //stack
-    int cap = 0; //capacity of stack
-    int top = 0; //top of stack
-    struct subs *stack = NULL;
+    while(1) {
+        const char *t = s;
+        btok = next_token(&s, ltok->mode);
 
-    #define push(str, id) {if (top >= cap) {cap = top + 1; stack = realloc(stack, cap * sizeof(struct subs));}; stack[top++]= (struct subs){(str), (id)};}
-
-    push(" ", -2);
-    push(cmd, -1);
-
-    int val_cap = 100;
-    char *val = malloc(val_cap * sizeof(char)); //need to change after use stack
-
-    #define add_val(c) {if (j >= val_cap) {val_cap = j + 1; val = realloc(val, val_cap * sizeof(char));}; val[j++] = (c);}
-
-    *ltok = null_ltok;
-
-    char delim = ' ';
-
-    int plain = 1;
-    int j = 0;
-
-    int aliasible = 1;
-
-    char tmp[2] = " ";
-
-    while (top) {
-        if (top == 1 && autodelim && delim != ' ') {
-            tmp[0] = delim;
-            push(tmp, -2);
+        if (btok.type == TOK_TILDE) {
+            if (!is_arg_token(*get_last_tok(ltok)))
+                btok = get_tok_arg(TOK_DOLLAR, strdup("HOME"));
+            else
+                btok = get_tok_char(TOK_ARG, '~');
         }
 
-        int cur_top = top;
-
-        const char *s = stack[top - 1].str;
-
-        if (!*s) {
-            set_alias_state(stack[top - 1].alias, 1);
-            aliasible = 1;
-            --top;
-            continue;
-        }
-
-        int btok = TOK_END; //breaking token
-
-        while(*s) {
-            if (aliasible && delim != '\'' && *s == '$') {
-                btok = TOK_DOLLAR; //Dollar sign
-                break;
-            }
-
-            if (delim != ' ') {
-                if (*s == delim)
-                    delim = ' ';
-                else
-                    add_val(*s);
-            } else {
-                btok = next_token(s);
-                if (btok != TOK_ARG)
-                    break;
-
-                if (*s == '"' || *s == '\'') {
-                    delim = *s;
-                    plain = 0;
-                } else
-                    add_val(*s);
-            }
-            ++s;
-        }
-
-        int alias_id;
-        int stop_tok = is_stop_tok(btok);
-
-        add_val('\0');
-        if (!aliasible || !val[0] || !plain || !stop_tok ||
-            (ltok->n && !is_stop_tok(ltok->tok[ltok->n-1].type)) || 
-            (alias_id = find_alias(val)) < 0
-        ) {
-            if (stop_tok) {
-                if (val[0])
-                    add_token(ltok, get_arg(strdup(val)));
-                add_token(ltok, get_tok(btok));
-                s += get_tok_len(btok);
-
-                plain = 1;
-                j = 0;
-            } else {
-                --j;
-            }
-
+        if (is_arg_token(btok) || is_quote_token(btok)) {
+            add_token(ltok, btok);
+        } else if (btok.type == TOK_DOLLAR) {
+            ltok->mode |= MODE_NALIAS_FLAG;
+            tokenize(getenv(btok.val), ltok);
+            ltok->mode &= ~MODE_NALIAS_FLAG;
+            free_tok(&btok);
         } else {
-            set_alias_state(alias_id, 0);
-            push(get_alias_cmd(alias_id), alias_id);
-            j = 0;
-        }
+            int al_id;
 
-        if (btok == TOK_DOLLAR) {
-            ++s; //skip the dollar
-            const char *s0 = s; 
-            int n = 0;
-            while (*s && isalnum(*s)) {
-                ++n;
-                ++s;
-            }
-            
-            if (s0 == s) {
-                add_val('$');
-            } else {
-                char *var = malloc((n + 1) * sizeof(char));
-                memcpy(var, s0, n * sizeof(char));
-                var[n] = '\0';
-                char *var_s = getenv(var);
-                free(var);
-                
-                if (var_s) {
-                    push(var_s, -1);
-                    plain = 0;
-                    aliasible = 0;
-                }
-            }
-        } else if (btok == TOK_TILDE) {
-            ++s; //skip the tilde
+            const struct token_t *last_tok = get_last_tok(ltok);
+            if ((ltok->mode & MODE_HEAD_FLAG) && 
+                last_tok->type == TOK_ARG &&
+                (al_id = find_alias(last_tok->val)) >= 0) {
 
-            if (plain && aliasible && j == 0) {
-                push(getenv("HOME"), -1);
-                plain = 0;
-                aliasible = 0;
+                //remove last token :))
+                free_tok(&btok);
+                remove_last_token(ltok);
+                set_alias_state(al_id, 0);
+                tokenize(get_alias_cmd(al_id), ltok);
+                set_alias_state(al_id, 1);
+
+                s = t; //undo 
+            } else if (btok.type == TOK_END) {
+                break;
             } else {
-                add_val('~');
+                add_token(ltok, btok);
             }
         }
-
-        stack[cur_top - 1].str = s;
     }
-
-    if (delim != ' ') {
-        error_str = "Parse Error: Not closing \" or '\n";
-        goto token_error;
-    } 
-
-    free(stack);
-    free(val);
-    return 0;
-token_error:
-    free_ltok(ltok);
-    free(stack);
-    free(val);
-    return -1;
 }

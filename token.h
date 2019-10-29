@@ -11,10 +11,9 @@ struct token_t {
     char *val;
 };
 
-extern const struct token_t null_tok;
-
 struct ltoken_t {
     int n;
+    int mode; //current mode at the end of the list
     struct token_t *tok;
 };
 
@@ -23,9 +22,9 @@ extern const char n_stok;
 extern const char *spec_tok[];
 
 
-#define TOK_END -4 //only end stack
-#define TOK_TILDE -3
-#define TOK_DOLLAR -2
+#define TOK_NULL -4 //token of null
+#define TOK_END -3 //only end stack
+#define TOK_NARG -2 //args that can't alias
 #define TOK_ARG -1
 #define TOK_AND 0
 #define TOK_ASYNC 1
@@ -36,28 +35,55 @@ extern const char *spec_tok[];
 #define TOK_OBRACK 6 //open bracket
 #define TOK_CBRRACK 7 //close bracket
 #define TOK_SEMICOL 8
-#define TOK_SPACE 255
+#define TOK_TILDE 9
 
-static inline int is_stop_tok(int type) {
-    return type >= 0;
+#define TOK_DOLLAR 50
+
+#define TOK_SPLIT 100
+#define TOK_SQU 101 //single quote
+#define TOK_DQU 102 //double quote
+
+#define MODE_HEAD_FLAG 1  //mode normall currently enter the head arg of the command
+#define MODE_SQUOTE_FLAG 2 //mode single quote
+#define MODE_DQUOTE_FLAG 4 //mode double quote
+#define MODE_NALIAS_FLAG 8
+
+static inline int is_mode_normal(int mode)
+{
+    return !(mode & (MODE_DQUOTE_FLAG | MODE_SQUOTE_FLAG));
 }
+
+static inline struct token_t get_tok_arg(int type, char *s)
+{
+    struct token_t tok = {type, s};
+    return tok;
+}
+
 
 static inline struct token_t get_tok(int type)
 {
-    if (type < 0)
-        return null_tok;
-
-    struct token_t tok = {type, NULL};
-    return tok;
+    return get_tok_arg(type, NULL);
 }
 
-int get_tok_len(int type);
 
+static inline int is_arg_token(const struct token_t tok) {
+    return tok.type == TOK_ARG || tok.type == TOK_NARG;
+}
 
-static inline struct token_t get_arg(char *arg)
-{
-    struct token_t tok = {TOK_ARG, arg};
-    return tok;
+static inline int is_quote_token(const struct token_t tok) {
+    return tok.type == TOK_SQU || tok.type == TOK_DQU;
+}
+
+static inline struct token_t *get_last_tok(struct ltoken_t *ltok) {
+    static struct token_t tok_null;
+
+    if (!ltok->n) {
+        tok_null.type = TOK_NULL;
+        tok_null.val = NULL;
+        return &tok_null;
+    }
+
+    return &ltok->tok[ltok->n - 1];
 }
 
 //check if t is the prefix of s. return t length if true (can be zero) -1 if false
@@ -75,9 +101,9 @@ static inline int compare_prefix(const char *s, const char *t) {
 struct token_t clone_tok(const struct token_t tok);
 void free_tok(struct token_t *tok);
 void free_ltok(struct ltoken_t *ltok);
-void add_single_token(struct ltoken_t *ltok, const struct token_t tok);
-void add_token(struct ltoken_t *ltok, const struct token_t tok); //can have token alias
 
-int tokenize(const char *s, struct ltoken_t *ltok, int autodelim);
+
+void add_token(struct ltoken_t *ltok, struct token_t tok);
+void tokenize(const char *cmd, struct ltoken_t *ltok);
 
 #endif

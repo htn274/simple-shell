@@ -17,6 +17,7 @@
 #define KEY_INT 3
 #define KEY_BCK 127
 #define KEY_TAB 9
+#define KEY_EOF 4
 
 struct lstring_t {
     char **str;
@@ -382,23 +383,24 @@ void show_table(const struct lstring_t *list) {
         }
     }
 
-    _write("\n", 1);
+    if (list->len % col != 0)
+        _write("\n", 1);
 }
 
-void auto_complete(int double_tab) {
-
+int auto_complete(int double_tab) {
     char *s = NULL;
     if (cur > 0 && !isspace(input[cur - 1])) {
-        struct ltoken_t ltok;
+        struct ltoken_t ltok = null_ltok;
 
         char temp = input[cur];
         input[cur] = '\0';
-        tokenize(input, &ltok, 1);
+        tokenize(input, &ltok);
         input[cur] = temp;
 
-        if (ltok.n > 0 && ltok.tok[ltok.n-1].type == TOK_ARG) {
-            s = ltok.tok[ltok.n-1].val;
-            ltok.tok[ltok.n-1].val = 0;
+        struct token_t *last_tok = get_last_tok(&ltok);
+        if (is_arg_token(*last_tok)) {
+            s = last_tok->val;
+            last_tok->val = 0;
         } 
 
         free_ltok(&ltok);
@@ -427,21 +429,27 @@ void auto_complete(int double_tab) {
 
     char *prefix= s + i + 1;
 
+    int finish = 0;
+
     if (double_tab) {
         struct lstring_t ext = find_all_extension(dir_path, prefix, 1);
         show_table(&ext);
         free_lstring(&ext);
         print_prompt();
+        finish = 1;
     } else {
         char *ext = find_extension(dir_path, prefix);
         if (ext) {
-            for (i = strlen(prefix); ext[i]; ++i)
+            for (i = strlen(prefix); ext[i]; ++i) {
                 insert(ext[i]);
+                finish = 1;
+            }
             free(ext);
         }
     }
 
     free(s);
+    return finish;
 }
 
 char *read_cmd() {
@@ -462,7 +470,12 @@ char *read_cmd() {
             double_tab = 0;
 
         if (iscntrl(c)) {
-            if (c == KEY_NUL) {
+            if (c == KEY_EOF) {
+                if (len == 0) {
+                    set_text("exit\n");
+                    break;
+                }
+            } else if (c == KEY_NUL) {
                 clear_buffer();
                 break;
             } else if (c == KEY_ESC) {
@@ -528,8 +541,10 @@ char *read_cmd() {
             } else if (c == KEY_BCK) {
                 backspace();
             } else if (c == KEY_TAB) {
-                auto_complete(double_tab);
-                double_tab = 1;
+                if (auto_complete(double_tab))
+                    double_tab = 0;
+                else
+                    double_tab = 1;
             } else {
                 char num[20];
                 int l = sprintf(num,"(%d)",c);

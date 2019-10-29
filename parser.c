@@ -90,16 +90,18 @@ char *cmd_to_string(const struct command_t *cmd) {
 
 int parse_command(const char *s, struct lcommand_t *cmd) {
     struct ltoken_t ltok = null_ltok;
-    if (tokenize(s, &ltok, 0))
-        return -1;
+    *cmd = null_lcmd;
+    struct command_t c = null_cmd;
+
+    tokenize(s, &ltok);
+    if (ltok.mode & (MODE_SQUOTE_FLAG | MODE_DQUOTE_FLAG)) {
+        error_str = "Parse error: Not closing \" or '\n";
+        goto parse_error;
+    }
     
     //add ending
     if (ltok.n && ltok.tok[ltok.n-1].type != TOK_SEMICOL)
         add_token(&ltok, get_tok(TOK_SEMICOL));
-
-
-    *cmd = null_lcmd;
-    struct command_t c = null_cmd;
 
     int i;
     for (i = 0; i < ltok.n; ++i) {
@@ -132,7 +134,7 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
                 error_str = "Parser Error: Cannot redirect from/to 2 files\n";
                 goto parse_error;
             }
-        case TOK_ARG:
+        case TOK_ARG: case TOK_NARG:
             ++c.argc;
             c.args = realloc(c.args, sizeof(char*) * (c.argc + 1));
             c.args[c.argc - 1] = ltok.tok[i].val;
