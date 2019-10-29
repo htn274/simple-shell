@@ -314,6 +314,8 @@ struct lstring_t find_all_extension(const char *dir_path, const char *prefix, in
         }
     }
 
+    closedir(d);
+
     if (!list)
         return null_lstring;
 
@@ -322,8 +324,6 @@ struct lstring_t find_all_extension(const char *dir_path, const char *prefix, in
 
     if (sort)
         qsort(list, len, sizeof(list[0]), compare);
-
-    closedir(d);
 
     return (struct lstring_t){list, len};
 }
