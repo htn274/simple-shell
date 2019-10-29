@@ -183,7 +183,7 @@ int redir_out(int *fd, char *file) {
         return -1;
     }
 
-    *fd = open(file, O_WRONLY | O_CREAT, mode);
+    *fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, mode);
     if (*fd < 0)
     {
         perror("Open file to write failed");
