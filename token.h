@@ -31,9 +31,9 @@ extern const char *spec_tok[];
 #define TOK_PIPE 2
 #define TOK_RDR_IN 3
 #define TOK_RDR_OUT 4
-#define TOK_RDR_ERR_OUT 5
+#define TOK_RDR_ERR 5
 #define TOK_OBRACK 6 //open bracket
-#define TOK_CBRRACK 7 //close bracket
+#define TOK_CBRACK 7 //close bracket
 #define TOK_SEMICOL 8
 #define TOK_TILDE 9
 

@@ -46,7 +46,7 @@ void update_mode(struct ltoken_t *ltok, const struct token_t tok) {
             if ((ltok->mode & MODE_HEAD_FLAG) && is_arg_token(*get_last_tok(ltok))) //currently head and have typed
                 ltok->mode &= ~MODE_HEAD_FLAG;
             break;
-        case TOK_SEMICOL: case TOK_AND: // case TOK_ASYNC:
+        case TOK_SEMICOL: case TOK_AND: case TOK_PIPE: // case TOK_ASYNC:
             ltok->mode |= MODE_HEAD_FLAG;
             break;
         case TOK_SQU:

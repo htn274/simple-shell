@@ -38,7 +38,7 @@ int get_rdr_type(int token) {
         case TOK_RDR_OUT:
             type = 1;
             break;
-        case TOK_RDR_ERR_OUT:
+        case TOK_RDR_ERR:
             type = 2;
             break;
     }
@@ -122,7 +122,7 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
         case TOK_AND: case TOK_SEMICOL:
             is_done = 1;
             break;
-        case TOK_RDR_IN: case TOK_RDR_OUT: case TOK_RDR_ERR_OUT:
+        case TOK_RDR_IN: case TOK_RDR_OUT: case TOK_RDR_ERR:
             if (i + 1 >= ltok.n || ltok.tok[i+1].type != TOK_ARG) {
                 error_str = "Parser Error: Missing filename after redirection\n";
                 goto parse_error;
