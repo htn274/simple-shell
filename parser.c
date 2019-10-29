@@ -94,8 +94,13 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
     struct command_t c = null_cmd;
 
     tokenize(s, &ltok);
-    if (ltok.mode & (MODE_SQUOTE_FLAG | MODE_DQUOTE_FLAG)) {
-        error_str = "Parse error: Not closing \" or '\n";
+    if (ltok.mode & MODE_SQUOTE_FLAG) {
+        error_str = "Parser error: Not closing the quote '\n";
+        goto parse_error;
+    }
+
+    if (ltok.mode & MODE_DQUOTE_FLAG) {
+        error_str = "Parser error: Not closing the quote \"\n";
         goto parse_error;
     }
     
