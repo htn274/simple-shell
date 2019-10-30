@@ -28,7 +28,19 @@ void sigchild_handler()
     for (i = 0; i < job_table.cap; ++i)
         if (job_table.job[i].running) {
             struct job_t *job = &job_table.job[i];
-            if (waitpid(job->pid, NULL, WNOHANG) > 0) {
+            int code;
+            if (waitpid(job->pid, &code, WNOHANG | WUNTRACED | WCONTINUED) < 0)
+                continue;
+
+            if (WIFSTOPPED(code) && job->running == 1) {
+                job->running = 2;
+                new_line();
+                printf("[%d]\t%d suspended\t%s\n", i + 1, job->pid, job->cmd);
+                free(job->cmd);
+                new_prompt = 1;
+            }
+
+            if (WIFEXITED(code)) {
                 job->running = 0;
                 new_line();
                 printf("[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
@@ -117,8 +129,12 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
 
     if (p == 0) {
         signal(SIGINT, SIG_DFL);
-        if (cmd->async)
-            signal(SIGINT, SIG_IGN); //won't catch signal when running async
+        //if (tcsetpgrp(STDOUT_FILENO, getgid()) < 0)
+        //    perror("set output foreground failed");
+        //tcsetpgrp(STDERR_FILENO, getgid());
+
+        //if (cmd->async)
+        //    signal(SIGINT, SIG_IGN); //won't catch signal when running async
 
         if (fd[0] >= 0 && dup2(fd[0], STDIN_FILENO) < 0) {
             perror("Exec input redirect failed");
@@ -148,6 +164,24 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
 
         _exit(1); //error
     } else {
+
+        if (setpgid(p, p) < 0)
+            perror("Detach failed"); //detach from parent process group
+
+        if (!cmd->async && !cmd->pipe) {
+            signal(SIGTTOU, SIG_IGN);
+            signal(SIGTTIN, SIG_IGN);
+            signal(SIGTSTP, SIG_IGN);
+
+            tcsetpgrp(STDIN_FILENO, getpgid(p));
+        } else {
+            tcsetpgrp(STDIN_FILENO, getpgrp());
+
+            signal(SIGTTOU, SIG_DFL);
+            signal(SIGTTIN, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
+        }
+
         close_fd(fd);
 
         if (job) {
@@ -239,9 +273,13 @@ int exec_lcommand(struct lcommand_t cmd) {
         unblock_chld();
 
         if (!p->async) {
-            if (!p->pipe)
+            if (!p->pipe) {
                 waitpid(job.pid, NULL, 0);
-            else {
+
+                if (tcsetpgrp(STDOUT_FILENO, getpgrp()) < 0)
+                    perror("set input foreground failed");
+
+            } else {
                 int job_id = add_job(&pipe_job);
                 pipe_job.job[job_id] = job_dup(job);
             }
@@ -252,6 +290,12 @@ int exec_lcommand(struct lcommand_t cmd) {
 
     for (i = 0; i < pipe_job.cap; ++i)
         waitpid(pipe_job.job[i].pid, NULL, 0);
+
+    tcsetpgrp(STDIN_FILENO, getpgrp());
+
+    signal(SIGTTOU, SIG_DFL);
+    signal(SIGTTIN, SIG_DFL);
+    signal(SIGTSTP, SIG_DFL);
 
     free_ljob(&pipe_job);
     return 0;
