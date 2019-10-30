@@ -69,7 +69,7 @@ int normalize(char **cmd) {
 
 
 
-int main()
+int main(int argc, char **argv)
 {
     signal(SIGINT, SIG_IGN);
     signal(SIGCHLD, sigchild_handler);
@@ -80,6 +80,33 @@ int main()
     set_alias("la", "ls -lAh");
 
     init_read();
+
+    if (argc > 1) {
+        //support for -c
+        int i;
+        printf("Running with args: ");
+        for (i = 0; i < argc; ++i)
+            printf("%s ", argv[i]);
+        printf("\n");
+
+        for (i = 0; i < argc; ++i)
+            if (strcmp(argv[i], "-c") == 0) {
+                if (i + 1 >= argc) {
+                    fputs("Expected command after -c\n", stderr);
+                    return 1;
+                } else {
+                    struct lcommand_t c;
+                    if (parse_command(argv[i+1], &c))
+                        fputs(error_str, stderr);
+
+                    if (c.n > 0) {
+                        exec_lcommand(c);
+                        free_lcommand(&c);
+                    }
+                    exit(0);
+                }
+            }
+    }
 
     char *s;
     while (1)

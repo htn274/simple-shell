@@ -179,13 +179,24 @@ int history(char **args) {
     return 0;
 }
 
+int exec(char **args) {
+    if (!args[1]) {
+        fputs("exec error: Too many few\n", stderr);
+        return -1;
+    }
+
+    return execvp(args[1], args + 1);
+}
+
+
 struct builtin_t bin_fun[] = {{"exit", shell_exit},
                               {"cd", cd},
                               {"set", set},
                               {"unset", unset},
                               {"alias", alias},
                               {"unalias", unalias},
-                              {"history", history}
+                              {"history", history},
+                              {"exec", exec}
                               };
 
 int bin_cnt = sizeof(bin_fun)/ sizeof(bin_fun[0]);
