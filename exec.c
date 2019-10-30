@@ -35,7 +35,15 @@ void sigchild_handler()
             if (WIFSTOPPED(code) && job->running == 1) {
                 job->running = 2;
                 new_line();
-                printf("[%d]\t%d suspended\t%s\n", i + 1, job->pid, job->cmd);
+                printf("[%d]\t%d suspended", i + 1, job->pid);
+                
+                if (WSTOPSIG(code) == SIGTTIN)
+                    printf("%s", " (tty input)");
+                else if(WSTOPSIG(code) == SIGTTOU)
+                    printf("%s", " (tty output)");
+
+                printf("\t%s\n", job->cmd);
+
                 free(job->cmd);
                 new_prompt = 1;
             }
