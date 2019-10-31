@@ -58,11 +58,25 @@ void update_mode(struct ltoken_t *ltok, const struct token_t tok) {
     }
 }
 
-void remove_last_token(struct ltoken_t *ltok) {
+void remove_last_token(struct ltoken_t *ltok)
+{
     if (!ltok->n)
         return;
 
     free_tok(&ltok->tok[--ltok->n]);
+}
+
+struct token_t *get_last_tok(struct ltoken_t *ltok)
+{
+    static struct token_t tok_null;
+
+    if (!ltok->n) {
+        tok_null.type = TOK_NULL;
+        tok_null.val = NULL;
+        return &tok_null;
+    }
+
+    return &ltok->tok[ltok->n - 1];
 }
 
 void str_merge(char **a, char *b) {

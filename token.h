@@ -58,45 +58,38 @@ static inline struct token_t get_tok_arg(int type, char *s)
     return tok;
 }
 
-
 static inline struct token_t get_tok(int type)
 {
     return get_tok_arg(type, NULL);
 }
 
-
-static inline int is_arg_token(const struct token_t tok) {
+static inline int is_arg_token(const struct token_t tok)
+{
     return tok.type == TOK_ARG || tok.type == TOK_NARG;
 }
 
-
-static inline int is_string_token(const struct token_t tok) {
+static inline int is_string_token(const struct token_t tok)
+{
     return is_arg_token(tok) || tok.type == TOK_DOLLAR;
 }
 
-static inline int is_quote_token(const struct token_t tok) {
+static inline int is_quote_token(const struct token_t tok)
+{
     return tok.type == TOK_SQU || tok.type == TOK_DQU;
 }
 
 //token that break the command and start another command
-static inline int is_break_token(const struct token_t tok) {
+static inline int is_break_token(const struct token_t tok)
+{
     return tok.type == TOK_PIPE || tok.type == TOK_SEMICOL || tok.type == TOK_AND || tok.type == TOK_END;
 }
 
-static inline struct token_t *get_last_tok(struct ltoken_t *ltok) {
-    static struct token_t tok_null;
-
-    if (!ltok->n) {
-        tok_null.type = TOK_NULL;
-        tok_null.val = NULL;
-        return &tok_null;
-    }
-
-    return &ltok->tok[ltok->n - 1];
-}
+void remove_last_token(struct ltoken_t *ltok);
+struct token_t *get_last_tok(struct ltoken_t *ltok);
 
 //check if t is the prefix of s. return t length if true (can be zero) -1 if false
-static inline int compare_prefix(const char *s, const char *t) {
+static inline int compare_prefix(const char *s, const char *t)
+{
     int i = 0;
     while (s[i] && t[i] && s[i] == t[i])
         ++i;
