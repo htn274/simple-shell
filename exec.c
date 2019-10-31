@@ -264,14 +264,17 @@ int exec_lcommand(struct lcommand_t cmd) {
         if (p->filename[2] && redir_out(&cfd[2], p->filename[2]) < 0)
             goto exec_fail;
 
-        struct job_t job;
+        struct job_t job = null_job;
 
         fexec_cmd(p, cfd, &nfd[0], &job);
         move_fd(cfd, nfd);
 
-        if (job.pid < 0)
-            continue;
-
+        if (job.pid < 0) {
+            if (p->pipe)
+                break;
+            else
+                continue;
+        }
         if (bg_stat) {
             int job_id = get_empty_job(&job_table);
             printf("[%d] %d\n", job_id + 1, job.pid);
