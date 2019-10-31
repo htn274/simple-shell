@@ -100,7 +100,6 @@ void close_fd(fd_list fd) {
     _close(fd[2]);
 }
 
-
 //nfd is read pipe out file description// need to close in the child process 
 int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
 {

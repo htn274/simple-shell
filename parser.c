@@ -105,9 +105,6 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
     }
 
     token_expand(&ltok, &ltok);
-    //add ending
-    if (ltok.n && ltok.tok[ltok.n-1].type != TOK_SEMICOL)
-        add_token(&ltok, get_tok(TOK_SEMICOL));
 
     int i;
     for (i = 0; i < ltok.n; ++i) {

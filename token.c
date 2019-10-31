@@ -82,6 +82,12 @@ void add_token(struct ltoken_t *ltok, struct token_t tok)
         tok = get_tok_arg(TOK_NARG, calloc(1, 1));
 
     struct token_t *last_tok = get_last_tok(ltok);
+
+    if (last_tok->type == TOK_END) {
+        remove_last_token(ltok);
+        last_tok = get_last_tok(ltok);
+    }
+
     if (is_arg_token(tok) && is_arg_token(*last_tok)) {
         if (tok.type == TOK_NARG)
             last_tok->type = TOK_NARG;
