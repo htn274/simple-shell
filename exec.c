@@ -136,13 +136,9 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
     }
 
     if (p == 0) {
+        //reset signal
         signal(SIGINT, SIG_DFL);
-        //if (tcsetpgrp(STDOUT_FILENO, getgid()) < 0)
-        //    perror("set output foreground failed");
-        //tcsetpgrp(STDERR_FILENO, getgid());
-
-        //if (cmd->async)
-        //    signal(SIGINT, SIG_IGN); //won't catch signal when running async
+        signal(SIGCHLD, SIG_DFL);
 
         if (fd[0] >= 0 && dup2(fd[0], STDIN_FILENO) < 0) {
             perror("Exec input redirect failed");
