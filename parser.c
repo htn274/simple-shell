@@ -120,7 +120,7 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
             c.pipe = 1;
             break;
         case TOK_RDR_IN: case TOK_RDR_OUT: case TOK_RDR_ERR:
-            if (i + 1 >= ltok.n || ltok.tok[i+1].type != TOK_ARG) {
+            if (i + 1 >= ltok.n || !is_arg_token(ltok.tok[i+1])) {
                 error_str = "Parser Error: Missing filename after redirection\n";
                 goto parse_error;
             }
