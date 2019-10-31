@@ -197,16 +197,13 @@ void tokenize(const char *cmd, struct ltoken_t *ltok)
                 btok = get_tok_char(TOK_ARG, '~');
         }
 
-        if (is_string_token(btok) || is_quote_token(btok)) {
-            add_token(ltok, btok);
-        } else {
-            int al_id;
+        struct token_t *last_tok = get_last_tok(ltok);
 
-            const struct token_t *last_tok = get_last_tok(ltok);
-            if ((ltok->mode & MODE_HEAD_FLAG) && 
-                last_tok->type == TOK_ARG &&
-                (al_id = find_alias(last_tok->val)) >= 0) {
+        if (!is_string_token(btok) && !is_quote_token(btok) && 
+            (ltok->mode & MODE_HEAD_FLAG) && last_tok->type == TOK_ARG) {
 
+            int al_id = find_alias(last_tok->val);
+            if (al_id >= 0) {
                 //remove last token :))
                 free_tok(&btok);
                 remove_last_token(ltok);
@@ -214,13 +211,15 @@ void tokenize(const char *cmd, struct ltoken_t *ltok)
                 tokenize(get_alias_cmd(al_id), ltok);
                 set_alias_state(al_id, 1);
 
-                s = t; //undo 
-            } else if (btok.type == TOK_END) {
-                break;
-            } else {
-                add_token(ltok, btok);
+                s = t; //undo S
+                continue;
             }
         }
+
+        add_token(ltok, btok);
+
+        if (btok.type == TOK_END)
+            break;
     }
 }
 

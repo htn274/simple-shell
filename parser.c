@@ -146,12 +146,7 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
             break; 
         }
 
-        if (is_break_token(ltok.tok[i])) {
-            if (!c.args) {
-                error_str = "Parse Error: Command with no arguments\n";
-                goto parse_error;
-            }
-
+        if (is_break_token(ltok.tok[i]) && c.args) {
             c.args[c.argc] = NULL;
             //add to head
             ++cmd->n;

@@ -80,7 +80,7 @@ static inline int is_quote_token(const struct token_t tok) {
 
 //token that break the command and start another command
 static inline int is_break_token(const struct token_t tok) {
-    return tok.type == TOK_PIPE || tok.type == TOK_SEMICOL || tok.type == TOK_AND || tok.type == TOK_END;
+    return tok.type == TOK_PIPE || tok.type == TOK_SEMICOL || tok.type == TOK_AND;
 }
 
 static inline struct token_t *get_last_tok(struct ltoken_t *ltok) {
