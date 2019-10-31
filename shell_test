@@ -1,0 +1,181 @@
+Default alias:
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias l='ls -lah'
+alias la='ls -lAh'
+
+Test
+-----
+simple command
+--normal--
+echo
+=> return an empty line => good
+echo abc
+=> return a line abc
+echo abc    def
+=> print out abc def
+-----
+test simple quoting
+"echo"
+=>run as normal
+ec"ho"
+=>run as normal
+echo abc"def"ab'  cd'
+=>print out 'abcdefab  cd'
+echo "adsf
+=>print error message (be specific about not closing ")
+echo "asdf"'df
+=>print error message (be specific about not closing ')
+------
+test simple dollar variale
+echo $HOME
+=>print out home directory
+set HI def
+echo abc$HI"ghi"
+=>print out abcdefghi
+set HI "$HOME"
+echo $HI
+=>print out home directory
+set HI '$HOME'
+echo $HI
+=>print out '$HOME'
+--------------------------------
+---- test tilde variable--------
+echo ~
+=> same as echo $HOME
+echo "~"
+=> only output ~
+echo ~/~
+=>output as echo $HOME/"~"
+
+------
+Test alias simple
+ls
+=> should output color same as ls --color=auto
+l
+=> should output same as ls --color=auto -lah
+ls ls
+=> should only expand the first term
+"l"s
+"ls"
+=> should not alias
+
+alias a 'ls'
+a
+unalias a
+a
+=> The first a should run as ls and the other is not found
+---- test redirection
+ls > hi
+=> should save to hi (file should be create new when not found and should rewrite if found)
+ls >
+=> parse error no file
+ls > $HI
+=> cannot create file
+asf 2>hi
+=> output error to file hi
+ls 1> hi 2> hi
+=> should output okay
+ls > hi
+sort -r<hi
+ls > hi1 > hi2
+=>not work not support output to 2 file
+
+not support >>, >2, >&, <<, etc.
+----------------------
+-------test pipe-------
+ls|sort -r
+ls|sort -r|tail -3
+yes | head
+=>test if sigpipe is sent
+=>head should run async with yes
+
+---------test async--------
+ls&
+sleep 5&
+=>should print the job_id and pid of the child process
+=>shoud notify when done, ctrl+C would not kill the background process
+=>when notify done, should print in new line not on the current line
+=>And redisplay the current input 
+vim&
+=> should be suspend from SIGTTOUT (background process tries to write to tty)
+python3 -c 'input()' & (should be suspend for trying to read from tty)
+//interacting case
+-----combine-----
+ls > hi | grep "a"
+=> not work because have two output
+ls | grep "a" < hi
+=> not work becasue have to input
+
+---builtin---
+cd ../
+cd ~
+exit
+exit 1
+=> exit with exit code
+history
+exec
+------------
+Interacting cases
+ls ls
+=> should expand the second term (not implement yet)
+alias hi 'ls "'
+hi>"
+=> should interprete as ls ">"
+alias a 'b;c'
+alias b 'a;c'
+alias c 'a;b'
+a
+=>should interprete as running  a; a; b; a; a; c
+alias x x
+x;
+=>should not run infinite times
+-------------
+
+
+builtin redirection
+
+history | grep "a"
+=> should work
+
+
+------------------------
+Interactive test
+Can go left and right to edit text, test if the cursor can get out of bound or be wrongly limited
+Using home and end to go there
+Backspace and Delete should work okay
+Can write in more than 1 line (not yet support)
+Ctrl+C works when editing
+Ctrl+C works when running
+Ctrl+D not exit shell when input has text
+Ctrl+D will exit shell when input is empty
+When closing with a foreground process running should show a message from terminal
+
+History
+Go up and down
+history command
+
+!!
+=> run last command (test when have no history and when have history)
+!! > hi
+=> run last command and out to file
+ls !!
+=>test for memleak :)))
+
+------
+Autocomplete
+
+Tab to complete prefix
+Double tab to show all current suggestion
+Currently not understanding context
+
+----command line
+./shell -c exec ls
+./shell -c ls
+=> should run
+------
+Check for memleak
+
+--unsupport---
+wildcards * and ?
+scripting (function, loop, condition, vv)
