@@ -103,15 +103,14 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
         error_str = "Parser error: Not closing the quote \"\n";
         goto parse_error;
     }
-    
+
+    token_expand(&ltok, &ltok);
     //add ending
     if (ltok.n && ltok.tok[ltok.n-1].type != TOK_SEMICOL)
         add_token(&ltok, get_tok(TOK_SEMICOL));
 
     int i;
     for (i = 0; i < ltok.n; ++i) {
-        int is_done = 0;
-
         switch (ltok.tok[i].type)
         {
         case TOK_ASYNC:
@@ -119,8 +118,6 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
             break;
         case TOK_PIPE:
             c.pipe = 1;
-        case TOK_AND: case TOK_SEMICOL:
-            is_done = 1;
             break;
         case TOK_RDR_IN: case TOK_RDR_OUT: case TOK_RDR_ERR:
             if (i + 1 >= ltok.n || ltok.tok[i+1].type != TOK_ARG) {
@@ -149,7 +146,7 @@ int parse_command(const char *s, struct lcommand_t *cmd) {
             break; 
         }
 
-        if (is_done) {
+        if (is_break_token(ltok.tok[i])) {
             if (!c.args) {
                 error_str = "Parse Error: Command with no arguments\n";
                 goto parse_error;

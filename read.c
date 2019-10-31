@@ -397,8 +397,10 @@ int auto_complete(int double_tab) {
         tokenize(input, &ltok);
         input[cur] = temp;
 
+        token_expand(&ltok, &ltok);
+
         struct token_t *last_tok = get_last_tok(&ltok);
-        if (is_arg_token(*last_tok)) {
+        if (is_string_token(*last_tok)) {
             s = last_tok->val;
             last_tok->val = 0;
         } 

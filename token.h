@@ -46,7 +46,6 @@ extern const char *spec_tok[];
 #define MODE_HEAD_FLAG 1  //mode normall currently enter the head arg of the command
 #define MODE_SQUOTE_FLAG 2 //mode single quote
 #define MODE_DQUOTE_FLAG 4 //mode double quote
-#define MODE_NALIAS_FLAG 8
 
 static inline int is_mode_normal(int mode)
 {
@@ -70,8 +69,18 @@ static inline int is_arg_token(const struct token_t tok) {
     return tok.type == TOK_ARG || tok.type == TOK_NARG;
 }
 
+
+static inline int is_string_token(const struct token_t tok) {
+    return is_arg_token(tok) || tok.type == TOK_DOLLAR;
+}
+
 static inline int is_quote_token(const struct token_t tok) {
     return tok.type == TOK_SQU || tok.type == TOK_DQU;
+}
+
+//token that break the command and start another command
+static inline int is_break_token(const struct token_t tok) {
+    return tok.type == TOK_PIPE || tok.type == TOK_SEMICOL || tok.type == TOK_AND || tok.type == TOK_END;
 }
 
 static inline struct token_t *get_last_tok(struct ltoken_t *ltok) {
@@ -102,8 +111,12 @@ struct token_t clone_tok(const struct token_t tok);
 void free_tok(struct token_t *tok);
 void free_ltok(struct ltoken_t *ltok);
 
+//expand DOLLAR token (not support wildcards yet) this will destroy old_ltok
+//also need to handle two ltok is the same
+void token_expand(struct ltoken_t *old_ltok, struct ltoken_t *ltok);
 
 void add_token(struct ltoken_t *ltok, struct token_t tok);
 void tokenize(const char *cmd, struct ltoken_t *ltok);
+void plain_tokenize(const char *cmd, struct ltoken_t *ltok);
 
 #endif

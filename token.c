@@ -43,11 +43,8 @@ struct token_t clone_tok(const struct token_t tok)
 void update_mode(struct ltoken_t *ltok, const struct token_t tok) {
     switch (tok.type) {
         case TOK_SPLIT:
-            if ((ltok->mode & MODE_HEAD_FLAG) && is_arg_token(*get_last_tok(ltok))) //currently head and have typed
+            if ((ltok->mode & MODE_HEAD_FLAG) && is_string_token(*get_last_tok(ltok))) //currently head and have typed
                 ltok->mode &= ~MODE_HEAD_FLAG;
-            break;
-        case TOK_SEMICOL: case TOK_AND: case TOK_PIPE: // case TOK_ASYNC:
-            ltok->mode |= MODE_HEAD_FLAG;
             break;
         case TOK_SQU:
             ltok->mode ^= MODE_SQUOTE_FLAG;
@@ -55,8 +52,9 @@ void update_mode(struct ltoken_t *ltok, const struct token_t tok) {
         case TOK_DQU:
             ltok->mode ^= MODE_DQUOTE_FLAG;
             break;
-        case TOK_ARG: case TOK_NARG:
-            break;
+        default:
+            if (is_break_token(tok))
+                ltok->mode |= MODE_HEAD_FLAG;
     }
 }
 
@@ -111,7 +109,6 @@ static inline struct token_t get_tok_char(int type, char t)
     return tok;
 }
 
-
 static struct token_t get_dollar_token(const char ** s) {
     int len = 0;
     while (isalnum((*s)[len]))
@@ -130,7 +127,6 @@ static struct token_t next_token(const char **s, int mode)
     if (!*s || !**s)
         return get_tok(TOK_END);
 
-    int dtok_arg = (mode & MODE_NALIAS_FLAG)? TOK_NARG : TOK_ARG; //default tok arg
     char t = **s;
     ++(*s);
 
@@ -140,7 +136,7 @@ static struct token_t next_token(const char **s, int mode)
         return get_tok(TOK_SPLIT);
     }
 
-    if (!(mode & (MODE_SQUOTE_FLAG | MODE_NALIAS_FLAG)) && t == '$')
+    if (!(mode & MODE_SQUOTE_FLAG) && t == '$')
         return get_dollar_token(s);
 
     if (t == '"' && (is_mode_normal(mode) || (mode & MODE_DQUOTE_FLAG)) )
@@ -153,7 +149,7 @@ static struct token_t next_token(const char **s, int mode)
         return get_tok_char(TOK_NARG, t); //get the current
     
     if (mode & MODE_DQUOTE_FLAG)
-        return get_tok_char(dtok_arg, t);
+        return get_tok_char(TOK_ARG, t);
 
     --(*s);
     //check for special tok
@@ -166,7 +162,22 @@ static struct token_t next_token(const char **s, int mode)
     }
 
     ++(*s);
-    return get_tok_char(dtok_arg, t);
+    return get_tok_char(TOK_ARG, t);
+}
+
+//only tokenize when have spaceing
+void plain_tokenize(const char *cmd, struct ltoken_t *ltok)
+{
+    while (*cmd) {
+        if (isspace(*cmd)) {
+            add_token(ltok, get_tok(TOK_SPLIT));
+            do {
+            ++cmd;
+            } while (isspace(*cmd));
+        } else {
+            add_token(ltok, get_tok_char(TOK_NARG, *cmd));
+        }
+    }
 }
 
 //convert to token and append to ltok
@@ -180,19 +191,14 @@ void tokenize(const char *cmd, struct ltoken_t *ltok)
         btok = next_token(&s, ltok->mode);
 
         if (btok.type == TOK_TILDE) {
-            if (!is_arg_token(*get_last_tok(ltok)))
+            if (!is_string_token(*get_last_tok(ltok)))
                 btok = get_tok_arg(TOK_DOLLAR, strdup("HOME"));
             else
                 btok = get_tok_char(TOK_ARG, '~');
         }
 
-        if (is_arg_token(btok) || is_quote_token(btok)) {
+        if (is_string_token(btok) || is_quote_token(btok)) {
             add_token(ltok, btok);
-        } else if (btok.type == TOK_DOLLAR) {
-            ltok->mode |= MODE_NALIAS_FLAG;
-            tokenize(getenv(btok.val), ltok);
-            ltok->mode &= ~MODE_NALIAS_FLAG;
-            free_tok(&btok);
         } else {
             int al_id;
 
@@ -216,4 +222,33 @@ void tokenize(const char *cmd, struct ltoken_t *ltok)
             }
         }
     }
+}
+
+void token_expand(struct ltoken_t *old_ltok, struct ltoken_t *ltok)
+{
+    int same_ltok = old_ltok == ltok;
+    struct ltoken_t temp_ltok = null_ltok;
+    if (same_ltok)
+        ltok = &temp_ltok;
+    
+    int i;
+    for (i = 0; i < old_ltok->n; ++i) {
+        struct token_t *tok = &old_ltok->tok[i];
+        if (tok->type == TOK_DOLLAR) {
+            char *env = getenv(tok->val);
+            if (!env)
+                env = "";
+
+            add_token(ltok, get_tok_arg(TOK_NARG, strdup(env)));
+            free_tok(tok);
+        } else {
+            add_token(ltok, *tok);
+            tok->val = NULL;
+        }
+    }
+
+    free_ltok(old_ltok);
+
+    if (same_ltok)
+        *old_ltok = *ltok;
 }
