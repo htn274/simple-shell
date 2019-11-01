@@ -233,7 +233,7 @@ int fg(char **args) {
     }
 
     if (job->running == JOB_STOPPED) {
-        printf("[%d]\t%d resume\n", job_id + 1, job->pid);
+        printf("[%d]\t%d continue\t%s\n", job_id + 1, job->pid, job->cmd);
         kill(job->pid, SIGCONT);
     }
     

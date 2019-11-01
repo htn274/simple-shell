@@ -36,8 +36,6 @@ void sigchild_handler()
                     printf("%s", " (tty output)");
 
                 printf("\t%s\n", job->cmd);
-
-                free(job->cmd);
                 new_prompt = 1;
             }
 
