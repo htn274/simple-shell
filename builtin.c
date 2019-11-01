@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <string.h>
+#include <ctype.h>
 #include "builtin.h"
 #include "error.h"
 #include "alias.h"
@@ -66,11 +67,26 @@ int exec_builtin(char **args, int *res, fd_list fd)
     return 0;
 }
 
+int is_num(char *s) {
+    while(*s) {
+        if (!isdigit(*s))
+            return 0;
+        ++s;
+    }
+    return 1;
+}
+
 int shell_exit(char **args) {
     if (args[1] && args[2]) {
         fputs("exit error: Too many arguments\n", stderr);
         return -1;
     }
+
+    if (args[1] && !is_num(args[1])) {
+        fputs("exit error: Exit code should be a non-negative integer\n", stderr);
+        return -1;
+    }
+    
     
     if (args[1])
         exit(atoi(args[1]));
@@ -200,6 +216,11 @@ int exec(char **args) {
 int fg(char **args) {
     if (!args[1]) {
         fputs("fg error: Too few arguments\n", stderr);
+        return -1;
+    }
+
+    if (!is_num(args[1])) {
+        fputs("fg error: Job id should be a positive integer\n", stderr);
         return -1;
     }
     
