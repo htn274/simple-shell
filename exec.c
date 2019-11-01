@@ -194,6 +194,14 @@ void move_fd(fd_list cfd, fd_list nfd) {
     nfd[0] = nfd[1] = nfd[2] = -1;
 }
 
+void save_suspend_job(struct job_t *job) {
+    set_control(getpgrp(), 1);
+    job->running = JOB_STOPPED;
+    int job_id = get_empty_job(&bg_job_table);
+    bg_job_table.job[job_id] = job_dup(*job);
+
+    printf("%d (%s) suspended and save as job [%d]\n", job->pid, job->cmd, job_id + 1);
+}
 
 int exec_lcommand(struct lcommand_t cmd) {
     fd_list cfd = {-1, -1, -1};
@@ -237,11 +245,11 @@ int exec_lcommand(struct lcommand_t cmd) {
 
         if (!p->async) {
             if (!p->pipe) {
-                waitpid(job.pid, NULL, 0);
+                int code;
+                waitpid(job.pid, &code, WUNTRACED | WCONTINUED);
 
-                if (tcsetpgrp(STDOUT_FILENO, getpgrp()) < 0)
-                    perror("set input foreground failed");
-
+                if (WIFSTOPPED(code))
+                    save_suspend_job(&job);
             } else {
                 int job_id = add_job(&pipe_job);
                 pipe_job.job[job_id] = job_dup(job);
@@ -251,8 +259,12 @@ int exec_lcommand(struct lcommand_t cmd) {
         free_job(&job);
     }
 
-    for (i = 0; i < pipe_job.cap; ++i)
-        waitpid(pipe_job.job[i].pid, NULL, 0);
+    for (i = 0; i < pipe_job.cap; ++i) {
+        int code;
+        waitpid(pipe_job.job[i].pid, &code, WUNTRACED | WCONTINUED);
+        if (WIFSTOPPED(code))
+            save_suspend_job(&pipe_job.job[i]);
+    }
 
     set_control(getpgrp(), 1);
 

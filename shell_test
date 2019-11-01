@@ -115,6 +115,8 @@ exit 1
 => exit with exit code
 history
 exec
+fg <job_id>
+
 ------------
 Interacting cases
 ls ls
@@ -150,6 +152,8 @@ Ctrl+C works when running
 Ctrl+D not exit shell when input has text
 Ctrl+D will exit shell when input is empty
 When closing with a foreground process running should show a message from terminal
+
+Ctrol-Z when running job => should not froze the shell
 
 History
 Go up and down

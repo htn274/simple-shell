@@ -218,6 +218,7 @@ int fg(char **args) {
     
     set_control(getpgid(job->pid), 0);
     waitpid(job->pid, NULL, 0);
+    job->running = JOB_DONE;
     set_control(getpgrp(), 1);
     return 0; //return process exit code ??
 }
