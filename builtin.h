@@ -12,5 +12,4 @@ extern struct builtin_t bin_fun[];
 typedef int fd_list[3];
 
 int exec_builtin(char **args, int *res, fd_list fd);
-
 #endif

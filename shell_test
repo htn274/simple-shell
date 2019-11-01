@@ -165,7 +165,7 @@ ls !!
 ------
 Autocomplete
 
-Tab to complete prefix
+Tab to complete prefix (should be able to complete white space/special token - not yet support)
 Double tab to show all current suggestion
 Currently not understanding context
 

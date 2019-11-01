@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct ljob_t bg_job_table = {0, NULL};
+
 int add_job(struct ljob_t *job_tab) {
     ++job_tab->cap;
     job_tab->job = realloc(job_tab->job , job_tab->cap * sizeof(struct job_t));

@@ -8,6 +8,8 @@
 #include "alias.h"
 #include "hist.h"
 
+#define PATH_MAX 4096
+
 int exec_builtin(char **args, int *res, fd_list fd)
 {
     for (int i = 0; i < bin_cnt; ++i)
@@ -19,7 +21,6 @@ int exec_builtin(char **args, int *res, fd_list fd)
             int fd_in = dup(STDIN_FILENO);
             int fd_out = dup(STDOUT_FILENO);
             int fd_err = dup(STDERR_FILENO);
-            
 
             if (fd[0] >= 0) {
                 dup2(fd[0], STDIN_FILENO);
@@ -35,7 +36,6 @@ int exec_builtin(char **args, int *res, fd_list fd)
                 dup2(fd[2], STDERR_FILENO);
                 close(fd[2]);
             }
-
 
             int r = bin_fun[i].fun(args);
 
@@ -80,11 +80,16 @@ int cd(char **args) {
         res = chdir(getenv("HOME"));
     else if (args[2])
         fputs("cd error: Too many arguments\n", stderr);
-    else  
+    else 
         res = chdir(args[1]);
 
     if (res < 0)
         perror("cd error");
+    else {
+        char * wd = getcwd(NULL, PATH_MAX);
+        setenv("PWD", wd, 1);
+        free(wd);
+    }
 
     return res;
 }
@@ -181,7 +186,7 @@ int history(char **args) {
 
 int exec(char **args) {
     if (!args[1]) {
-        fputs("exec error: Too many few\n", stderr);
+        fputs("exec error: Too few arguments\n", stderr);
         return -1;
     }
 

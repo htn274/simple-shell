@@ -19,15 +19,13 @@
 
 #define _close(fd) {if(fd >= 0) close(fd);}
 
-struct ljob_t job_table = {0,NULL};
-
 void sigchild_handler()
 {
     int new_prompt = 0;
     int i;
-    for (i = 0; i < job_table.cap; ++i)
-        if (job_table.job[i].running) {
-            struct job_t *job = &job_table.job[i];
+    for (i = 0; i < bg_job_table.cap; ++i)
+        if (bg_job_table.job[i].running) {
+            struct job_t *job = &bg_job_table.job[i];
             int code;
             if (waitpid(job->pid, &code, WNOHANG | WUNTRACED | WCONTINUED) < 0)
                 continue;
@@ -270,10 +268,11 @@ int exec_lcommand(struct lcommand_t cmd) {
             else
                 continue;
         }
+
         if (bg_stat) {
-            int job_id = get_empty_job(&job_table);
+            int job_id = get_empty_job(&bg_job_table);
             printf("[%d] %d\n", job_id + 1, job.pid);
-            job_table.job[job_id] = job_dup(job);
+            bg_job_table.job[job_id] = job_dup(job);
         }
 
         unblock_chld();
