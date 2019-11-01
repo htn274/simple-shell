@@ -16,51 +16,9 @@
 #include "shell.h"
 #include "builtin.h"
 #include "read.h"
+#include "term.h"
 
 #define _close(fd) {if(fd >= 0) close(fd);}
-
-void sigchild_handler()
-{
-    int new_prompt = 0;
-    int i;
-    for (i = 0; i < bg_job_table.cap; ++i)
-        if (bg_job_table.job[i].running) {
-            struct job_t *job = &bg_job_table.job[i];
-            int code;
-            if (waitpid(job->pid, &code, WNOHANG | WUNTRACED | WCONTINUED) < 0)
-                continue;
-
-            if (WIFSTOPPED(code) && job->running == 1) {
-                job->running = 2;
-                new_line();
-                printf("[%d]\t%d suspended", i + 1, job->pid);
-                
-                if (WSTOPSIG(code) == SIGTTIN)
-                    printf("%s", " (tty input)");
-                else if(WSTOPSIG(code) == SIGTTOU)
-                    printf("%s", " (tty output)");
-
-                printf("\t%s\n", job->cmd);
-
-                free(job->cmd);
-                new_prompt = 1;
-            }
-
-            if (WIFEXITED(code)) {
-                job->running = 0;
-                new_line();
-                printf("[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
-                free(job->cmd);
-                new_prompt = 1;
-            }
-        }
-
-    if (new_prompt) {
-        print_prompt();
-        //clear_buffer();
-    }
-    
-}
 
 void block_chld() {
     sigset_t s;
@@ -74,6 +32,15 @@ void unblock_chld() {
     sigemptyset(&s);
     sigaddset(&s, SIGCHLD);
     sigprocmask(SIG_UNBLOCK, &s, NULL);
+}
+
+void set_control(pid_t pgrp, int catch_sig)
+{
+    tcsetpgrp(STDIN_FILENO, pgrp);
+
+    signal(SIGTTOU, catch_sig? SIG_DFL : SIG_IGN);
+    signal(SIGTTIN, catch_sig? SIG_DFL : SIG_IGN);
+    signal(SIGTSTP, catch_sig? SIG_DFL : SIG_IGN);
 }
 
 int pipe_next(fd_list fd) {
@@ -116,12 +83,11 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
         if (job) {
             job->pid = -1;
             job->cmd = NULL;
-            job->running = 0;
+            job->running = JOB_DONE;
         }
         
         return 0;
     }
-
 
     block_chld();
 
@@ -129,6 +95,7 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
     if (p < 0) {
         perror("Exec fork failed");
         job->pid = -1;
+        job->running = JOB_DONE;
         return -1;
     }
 
@@ -169,25 +136,16 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
         if (setpgid(p, p) < 0)
             perror("Detach failed"); //detach from parent process group
 
-        if (!cmd->async && !cmd->pipe) {
-            signal(SIGTTOU, SIG_IGN);
-            signal(SIGTTIN, SIG_IGN);
-            signal(SIGTSTP, SIG_IGN);
-
-            tcsetpgrp(STDIN_FILENO, getpgid(p));
-        } else {
-            tcsetpgrp(STDIN_FILENO, getpgrp());
-
-            signal(SIGTTOU, SIG_DFL);
-            signal(SIGTTIN, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
-        }
+        if (!cmd->async && !cmd->pipe)
+            set_control(getpgid(p), 0);
+        else
+            set_control(getpgrp(), 1);
 
         close_fd(fd);
 
         if (job) {
             job->pid = p;
-            job->running = 1;
+            job->running = JOB_RUNNING;
             job->cmd = cmd_to_string(cmd);
         }
 
@@ -296,11 +254,7 @@ int exec_lcommand(struct lcommand_t cmd) {
     for (i = 0; i < pipe_job.cap; ++i)
         waitpid(pipe_job.job[i].pid, NULL, 0);
 
-    tcsetpgrp(STDIN_FILENO, getpgrp());
-
-    signal(SIGTTOU, SIG_DFL);
-    signal(SIGTTIN, SIG_DFL);
-    signal(SIGTSTP, SIG_DFL);
+    set_control(getpgrp(), 1);
 
     free_ljob(&pipe_job);
     return 0;

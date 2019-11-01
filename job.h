@@ -7,13 +7,17 @@
 #define NULL (void *)0
 #endif 
 
+#define JOB_DONE 0
+#define JOB_RUNNING 1
+#define JOB_STOPPED 2
+
 struct job_t {
     pid_t pid;
     char *cmd;
     int running;
 }; //job table
 
-static const struct job_t null_job = {(pid_t)-1,NULL, 1};
+static const struct job_t null_job = {(pid_t)-1,NULL, JOB_DONE};
 
 struct ljob_t {
     int cap;
@@ -22,6 +26,7 @@ struct ljob_t {
 
 static const struct ljob_t null_ljob = {0, NULL};
 
+struct job_t *get_job(struct ljob_t *job_tab, int job_id);
 int add_job(struct ljob_t *job_tab);
 int get_empty_job(struct ljob_t *job_tab);
 void free_ljob(struct ljob_t *job_tab);

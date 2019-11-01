@@ -2,11 +2,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <string.h>
 #include "builtin.h"
 #include "error.h"
 #include "alias.h"
 #include "hist.h"
+#include "job.h"
+#include "term.h"
 
 #define PATH_MAX 4096
 
@@ -171,7 +175,6 @@ int unalias(char **args) {
     }
 }
 
-
 int history(char **args) {
     if (args[1]){
         fputs("history error: Too many arguments\n", stderr);
@@ -194,6 +197,32 @@ int exec(char **args) {
 }
 
 
+int fg(char **args) {
+    if (!args[1]) {
+        fputs("fg error: Too few arguments\n", stderr);
+        return -1;
+    }
+    
+    int job_id = atoi(args[1]) - 1;
+    struct job_t *job = get_job(&bg_job_table, job_id);
+
+    if (job->running == JOB_DONE) {
+        fputs("fg error: Job is not found, or already finished\n", stderr);
+        return -1;
+    }
+
+    if (job->running == JOB_STOPPED) {
+        printf("[%d]\t%d resume\n", job_id + 1, job->pid);
+        kill(job->pid, SIGCONT);
+    }
+    
+    set_control(getpgid(job->pid), 0);
+    waitpid(job->pid, NULL, 0);
+    set_control(getpgrp(), 1);
+    return 0; //return process exit code ??
+}
+
+
 struct builtin_t bin_fun[] = {{"exit", shell_exit},
                               {"cd", cd},
                               {"set", set},
@@ -201,7 +230,8 @@ struct builtin_t bin_fun[] = {{"exit", shell_exit},
                               {"alias", alias},
                               {"unalias", unalias},
                               {"history", history},
-                              {"exec", exec}
+                              {"exec", exec},
+                              {"fg", fg}
                               };
 
 int bin_cnt = sizeof(bin_fun)/ sizeof(bin_fun[0]);

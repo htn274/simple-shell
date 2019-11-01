@@ -3,6 +3,7 @@
 
 #include <signal.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <string.h>
 
 #include "command.h"
@@ -11,6 +12,49 @@
 #include "alias.h"
 #include "read.h"
 #include "hist.h"
+#include "job.h"
+
+void sigchild_handler()
+{
+    int new_prompt = 0;
+    int i;
+    for (i = 0; i < bg_job_table.cap; ++i)
+        if (bg_job_table.job[i].running != JOB_DONE) {
+            struct job_t *job = &bg_job_table.job[i];
+            int code;
+            if (waitpid(job->pid, &code, WNOHANG | WUNTRACED | WCONTINUED) < 0)
+                continue;
+
+            if (WIFSTOPPED(code) && job->running == JOB_RUNNING) {
+                job->running = JOB_STOPPED;
+                new_line();
+                printf("[%d]\t%d suspended", i + 1, job->pid);
+                
+                if (WSTOPSIG(code) == SIGTTIN)
+                    printf("%s", " (tty input)");
+                else if(WSTOPSIG(code) == SIGTTOU)
+                    printf("%s", " (tty output)");
+
+                printf("\t%s\n", job->cmd);
+
+                free(job->cmd);
+                new_prompt = 1;
+            }
+
+            if (WIFEXITED(code)) {
+                job->running = JOB_DONE;
+                new_line();
+                printf("[%d]\t%d done\t%s\n", i + 1, job->pid, job->cmd);
+                free(job->cmd);
+                new_prompt = 1;
+            }
+        }
+
+    if (new_prompt) {
+        print_prompt();
+        //clear_buffer();
+    }   
+}
 
 char *recent = NULL;
 
@@ -66,8 +110,6 @@ int normalize(char **cmd) {
     *cmd = new;
     return rep;
 }
-
-
 
 int main(int argc, char **argv)
 {

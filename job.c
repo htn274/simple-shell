@@ -4,6 +4,16 @@
 
 struct ljob_t bg_job_table = {0, NULL};
 
+struct job_t *get_job(struct ljob_t *job_tab, int job_id) {
+    static struct job_t null;
+
+    null = null_job;
+    if (job_id < 0 || job_id >= job_tab->cap)
+        return &null;
+
+    return &job_tab->job[job_id];
+}
+
 int add_job(struct ljob_t *job_tab) {
     ++job_tab->cap;
     job_tab->job = realloc(job_tab->job , job_tab->cap * sizeof(struct job_t));
