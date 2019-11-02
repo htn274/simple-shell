@@ -7,10 +7,10 @@
 #include "alias.h"
 #include "error.h"
 
-const struct ltoken_t null_ltok = {0, MODE_HEAD_FLAG, 0};
+const struct ltoken_t null_ltok = {0, 0, 0};
 
-const char n_stok = 10;
-const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";", "~"};
+const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";"};
+const char n_stok = sizeof(spec_tok)/sizeof(spec_tok[0]);
 
 void free_tok(struct token_t *tok)
 {
@@ -27,34 +27,14 @@ void free_ltok(struct ltoken_t *ltok)
     free(ltok->tok);
 }
 
-struct token_t clone_tok(const struct token_t tok)
-{
-    struct token_t ctok;
-    ctok.type = tok.type;
-
-    if (tok.val)
-        ctok.val = strdup(tok.val);
-    else
-        ctok.val = NULL;
-    
-    return ctok;
-}
-
 void update_mode(struct ltoken_t *ltok, const struct token_t tok) {
     switch (tok.type) {
-        case TOK_SPLIT:
-            if ((ltok->mode & MODE_HEAD_FLAG) && is_string_token(*get_last_tok(ltok))) //currently head and have typed
-                ltok->mode &= ~MODE_HEAD_FLAG;
-            break;
         case TOK_SQU:
             ltok->mode ^= MODE_SQUOTE_FLAG;
             break;
         case TOK_DQU:
             ltok->mode ^= MODE_DQUOTE_FLAG;
             break;
-        default:
-            if (is_break_token(tok))
-                ltok->mode |= MODE_HEAD_FLAG;
     }
 }
 
@@ -66,34 +46,58 @@ void remove_last_token(struct ltoken_t *ltok)
     free_tok(&ltok->tok[--ltok->n]);
 }
 
-struct token_t *get_last_tok(struct ltoken_t *ltok)
+
+struct token_t *get_tok_offset(struct ltoken_t *ltok, int offset)
 {
     static struct token_t tok_null;
 
-    if (!ltok->n) {
+    if (offset > ltok->n) {
         tok_null.type = TOK_NULL;
+        tok_null.len = 0;
         tok_null.val = NULL;
         return &tok_null;
     }
 
-    return &ltok->tok[ltok->n - 1];
+    return &ltok->tok[ltok->n - offset];
 }
 
-void str_merge(char **a, char *b) {
-    int lena = strlen(*a);
-    int len = lena + strlen(b);
-    *a = realloc(*a, len + 1);
+struct token_t *get_last_tok(struct ltoken_t *ltok)
+{
+    return get_tok_offset(ltok, 1);
+}
 
-    strcpy(*a + lena, b);
-    free(b);
+int is_last_tok_aliasible(struct ltoken_t *ltok) {
+    if (get_tok_offset(ltok, 1)->type != TOK_ARG)
+        return 0;
+
+    if (is_string_token(*get_tok_offset(ltok, 2)))
+        return 0;
+
+    if (get_tok_offset(ltok, 2)->type == TOK_SPLIT)
+        return 0; //not really but most of the case unless redirect first
+
+    return 1;
+}
+
+void str_merge(struct token_t *a, struct token_t *b) {
+    int lena = a->len;
+    int len = lena + b->len;
+    a->val = realloc(a->val, len + 1);
+    a->len = len;
+
+    strcpy(a->val + lena, b->val);
+    free_tok(b);
 }
 
 void add_token(struct ltoken_t *ltok, struct token_t tok)
 {
+    if(tok.type == TOK_NULL)
+        return;
+
     update_mode(ltok, tok);
 
     if (is_quote_token(tok))
-        tok = get_tok_arg(TOK_NARG, calloc(1, 1));
+        tok = get_tok_arg(TOK_NARG, 0, calloc(1, 1));
 
     struct token_t *last_tok = get_last_tok(ltok);
 
@@ -102,15 +106,12 @@ void add_token(struct ltoken_t *ltok, struct token_t tok)
         last_tok = get_last_tok(ltok);
     }
 
-    if (is_arg_token(tok) && is_arg_token(*last_tok)) {
-        if (tok.type == TOK_NARG)
-            last_tok->type = TOK_NARG;
-
-        str_merge(&last_tok->val, tok.val);
+    if (is_arg_token(tok) && last_tok->type == tok.type) {
+        str_merge(last_tok, &tok);
     } else {
-        if (tok.type == TOK_SPLIT && !is_arg_token(*last_tok))
-            return; //only add tok_split  arg token
-
+        if (tok.type == TOK_SPLIT && !is_string_token(*get_last_tok(ltok)))
+            return;
+    
         ++ltok->n;
         ltok->tok = realloc(ltok->tok, ltok->n * sizeof(struct token_t));
         ltok->tok[ltok->n-1] = tok;
@@ -125,8 +126,7 @@ static inline struct token_t get_tok_char(int type, char t)
     s[0] = t;
     s[1] = '\0';
 
-    struct token_t tok = {type, s};
-    return tok;
+    return get_tok_arg(type, 1, s);
 }
 
 static struct token_t get_dollar_token(const char ** s) {
@@ -139,10 +139,10 @@ static struct token_t get_dollar_token(const char ** s) {
     arg[len] = '\0';
 
     *s += len;
-    return get_tok_arg(TOK_DOLLAR, arg);
+    return get_tok_arg(TOK_DOLLAR, len, arg);
 }
 
-static struct token_t next_token(const char **s, int mode)
+static struct token_t next_token(const char **s, struct ltoken_t * ltok)
 {
     if (!*s || !**s)
         return get_tok(TOK_END);
@@ -150,9 +150,12 @@ static struct token_t next_token(const char **s, int mode)
     char t = **s;
     ++(*s);
 
+    int mode = ltok->mode;
+
     if (isspace(t) && is_mode_normal(mode)) {
         while (isspace(**s))
             ++*s;
+
         return get_tok(TOK_SPLIT);
     }
 
@@ -170,6 +173,13 @@ static struct token_t next_token(const char **s, int mode)
     
     if (mode & MODE_DQUOTE_FLAG)
         return get_tok_char(TOK_ARG, t);
+
+    if (t == '~') {
+        if (is_string_token(*get_last_tok(ltok)))
+            return get_tok_char(TOK_ARG, '~');
+        else
+            return get_tok(TOK_TILDE);
+    }
 
     --(*s);
     //check for special tok
@@ -208,19 +218,12 @@ void tokenize(const char *cmd, struct ltoken_t *ltok)
 
     while(1) {
         const char *t = s;
-        btok = next_token(&s, ltok->mode);
-
-        if (btok.type == TOK_TILDE) {
-            if (!is_string_token(*get_last_tok(ltok)))
-                btok = get_tok_arg(TOK_DOLLAR, strdup("HOME"));
-            else
-                btok = get_tok_char(TOK_ARG, '~');
-        }
-
-        struct token_t *last_tok = get_last_tok(ltok);
+        btok = next_token(&s, ltok);
 
         if (!is_string_token(btok) && !is_quote_token(btok) && 
-            (ltok->mode & MODE_HEAD_FLAG) && last_tok->type == TOK_ARG) {
+            is_last_tok_aliasible(ltok)) {
+
+            struct token_t *last_tok = get_last_tok(ltok);
 
             int al_id = find_alias(last_tok->val);
             if (al_id >= 0) {
@@ -243,6 +246,14 @@ void tokenize(const char *cmd, struct ltoken_t *ltok)
     }
 }
 
+void add_env(struct ltoken_t *ltok, const char *var) {
+    char *env = getenv(var);
+    if (!env)
+        env = "";
+
+    add_token(ltok, get_tok_arg(TOK_NARG, strlen(env), strdup(env)));
+}
+
 void token_expand(struct ltoken_t *old_ltok, struct ltoken_t *ltok)
 {
     int same_ltok = old_ltok == ltok;
@@ -254,13 +265,13 @@ void token_expand(struct ltoken_t *old_ltok, struct ltoken_t *ltok)
     for (i = 0; i < old_ltok->n; ++i) {
         struct token_t *tok = &old_ltok->tok[i];
         if (tok->type == TOK_DOLLAR) {
-            char *env = getenv(tok->val);
-            if (!env)
-                env = "";
-
-            add_token(ltok, get_tok_arg(TOK_NARG, strdup(env)));
+            add_env(ltok, tok->val);
             free_tok(tok);
+        } else if (tok->type == TOK_TILDE) {
+            add_env(ltok, "HOME");
         } else {
+            if (is_string_token(*tok))
+                tok->type = TOK_NARG;
             add_token(ltok, *tok);
             tok->val = NULL;
         }

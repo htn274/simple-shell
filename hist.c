@@ -9,7 +9,7 @@ int hist_len() {
     return n_hist;
 }
 
-void add_history(char *cmd) {
+void add_history(const char *cmd) {
     ++n_hist;
     hist = realloc(hist, n_hist * sizeof(hist[0]));
 

@@ -8,6 +8,7 @@
 
 struct token_t {
     int type; //-1 if not special token
+    int len;  // len of val, this is to reduce strlen
     char *val;
 };
 
@@ -43,24 +44,23 @@ extern const char *spec_tok[];
 #define TOK_SQU 101 //single quote
 #define TOK_DQU 102 //double quote
 
-#define MODE_HEAD_FLAG 1  //mode normall currently enter the head arg of the command
-#define MODE_SQUOTE_FLAG 2 //mode single quote
-#define MODE_DQUOTE_FLAG 4 //mode double quote
+#define MODE_SQUOTE_FLAG 1 //mode single quote
+#define MODE_DQUOTE_FLAG 2 //mode double quote
 
 static inline int is_mode_normal(int mode)
 {
     return !(mode & (MODE_DQUOTE_FLAG | MODE_SQUOTE_FLAG));
 }
 
-static inline struct token_t get_tok_arg(int type, char *s)
+static inline struct token_t get_tok_arg(int type, int len, char *s)
 {
-    struct token_t tok = {type, s};
+    struct token_t tok = {type, len, s};
     return tok;
 }
 
 static inline struct token_t get_tok(int type)
 {
-    return get_tok_arg(type, NULL);
+    return get_tok_arg(type, 0, NULL);
 }
 
 static inline int is_arg_token(const struct token_t tok)
@@ -70,7 +70,7 @@ static inline int is_arg_token(const struct token_t tok)
 
 static inline int is_string_token(const struct token_t tok)
 {
-    return is_arg_token(tok) || tok.type == TOK_DOLLAR;
+    return is_arg_token(tok) || tok.type == TOK_DOLLAR || tok.type == TOK_TILDE;
 }
 
 static inline int is_quote_token(const struct token_t tok)
@@ -100,7 +100,6 @@ static inline int compare_prefix(const char *s, const char *t)
     return -1;
 }
 
-struct token_t clone_tok(const struct token_t tok);
 void free_tok(struct token_t *tok);
 void free_ltok(struct ltoken_t *ltok);
 
