@@ -39,6 +39,7 @@ extern const char *spec_tok[];
 #define TOK_TILDE 9
 
 #define TOK_DOLLAR 50
+#define TOK_BCKLASH 51 //token for backlash \char :))
 
 #define TOK_SPLIT 100
 #define TOK_SQU 101 //single quote

@@ -122,6 +122,9 @@ static inline struct token_t get_tok_char(int type, char t)
 {
     assert(type == TOK_ARG || type == TOK_NARG);
 
+    if (t == '\0')
+        return get_tok(TOK_NULL);
+
     char *s = calloc(2, sizeof(t));
     s[0] = t;
     s[1] = '\0';
@@ -129,9 +132,13 @@ static inline struct token_t get_tok_char(int type, char t)
     return get_tok_arg(type, 1, s);
 }
 
+int is_var_name(char c) {
+    return isalnum(c) || c == '_';
+}
+
 static struct token_t get_dollar_token(const char ** s) {
     int len = 0;
-    while (isalnum((*s)[len]))
+    while (is_var_name((*s)[len]))
         ++len;
 
     char *arg = malloc(len + 1);
@@ -140,6 +147,19 @@ static struct token_t get_dollar_token(const char ** s) {
 
     *s += len;
     return get_tok_arg(TOK_DOLLAR, len, arg);
+}
+
+static struct token_t get_escape_token(const char ** s) {
+    static const char from[] = {'\\', '0', 'b', 'n', 'r', 't'};
+    static const char to[] = {'\\', '\0', '\b', '\n', '\r', '\t'};
+    int i;
+    for (i = 0; i < sizeof(from); ++i)
+        if (from[i] == **s) {
+            ++*s;
+            return get_tok_char(TOK_NARG, to[i]);
+        }
+
+    return get_tok_char(TOK_ARG, '\\');
 }
 
 static struct token_t next_token(const char **s, struct ltoken_t * ltok)
@@ -159,8 +179,18 @@ static struct token_t next_token(const char **s, struct ltoken_t * ltok)
         return get_tok(TOK_SPLIT);
     }
 
-    if (!(mode & MODE_SQUOTE_FLAG) && t == '$')
-        return get_dollar_token(s);
+    if (!(mode & MODE_SQUOTE_FLAG)) {
+        if (t == '$')
+            return get_dollar_token(s);
+        if (t == '\\') {
+            if (mode & MODE_DQUOTE_FLAG)
+                return get_escape_token(s);
+            else if (**s)
+                return get_tok_char(TOK_NARG, *((*s)++));
+            else
+                return get_tok(TOK_NULL);
+        }
+    }
 
     if (t == '"' && (is_mode_normal(mode) || (mode & MODE_DQUOTE_FLAG)) )
         return get_tok(TOK_DQU);
