@@ -13,11 +13,12 @@
 
 struct job_t {
     pid_t pid;
+    pid_t pgid;
     char *cmd;
     int running;
 }; //job table
 
-static const struct job_t null_job = {(pid_t)-1,NULL, JOB_DONE};
+static const struct job_t null_job = {(pid_t)-1, (pid_t)-1, NULL, JOB_DONE};
 
 struct ljob_t {
     int cap;

@@ -5,7 +5,6 @@
 #define NULL (void *)0
 #endif 
 
-
 struct token_t {
     int type; //-1 if not special token
     int len;  // len of val, this is to reduce strlen
@@ -36,10 +35,13 @@ extern const char *spec_tok[];
 #define TOK_OBRACK 6 //open bracket
 #define TOK_CBRACK 7 //close bracket
 #define TOK_SEMICOL 8
-#define TOK_TILDE 9
+#define TOK_STAR 9
+#define TOK_QMARK 10 //question mark
+
 
 #define TOK_DOLLAR 50
-#define TOK_BCKLASH 51 //token for backlash \char :))
+#define TOK_TILDE 51
+#define TOK_BCKLASH 52 //token for backlash \char :))
 
 #define TOK_SPLIT 100
 #define TOK_SQU 101 //single quote
@@ -71,7 +73,7 @@ static inline int is_arg_token(const struct token_t tok)
 
 static inline int is_string_token(const struct token_t tok)
 {
-    return is_arg_token(tok) || tok.type == TOK_DOLLAR || tok.type == TOK_TILDE;
+    return is_arg_token(tok) || tok.type == TOK_DOLLAR || tok.type == TOK_TILDE || tok.type == TOK_STAR || tok.type == TOK_QMARK;
 }
 
 static inline int is_quote_token(const struct token_t tok)

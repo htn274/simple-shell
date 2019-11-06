@@ -66,7 +66,8 @@ void close_fd(fd_list fd) {
 }
 
 //nfd is read pipe out file description// need to close in the child process 
-int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
+//c_pgid is group pid of the child process, if it is 0 then it will create a group
+int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job, int c_pgid)
 {
     char **args = cmd->args;
 
@@ -81,7 +82,7 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
 
     if (exec_builtin(args, NULL, fd)) {
         if (job) {
-            job->pid = -1;
+            job->pid = job->pgid = -1;
             job->cmd = NULL;
             job->running = JOB_DONE;
         }
@@ -94,7 +95,7 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
     pid_t p = fork();
     if (p < 0) {
         perror("Exec fork failed");
-        job->pid = -1;
+        job->pid = job->pgid = -1;
         job->running = JOB_DONE;
         return -1;
     }
@@ -133,11 +134,13 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
         _exit(1); //error
     } else {
 
-        if (setpgid(p, p) < 0)
+        if (setpgid(p, c_pgid) < 0)
             perror("Detach failed"); //detach from parent process group
 
+        c_pgid = getpgid(p);
+
         if (!cmd->async && !cmd->pipe)
-            set_control(getpgid(p), 0);
+            set_control(c_pgid, 0);
         else
             set_control(getpgrp(), 1);
 
@@ -145,6 +148,7 @@ int fexec_cmd(struct command_t *cmd, fd_list fd, int *nfd, struct job_t *job)
 
         if (job) {
             job->pid = p;
+            job->pgid = c_pgid;
             job->running = JOB_RUNNING;
             job->cmd = cmd_to_string(cmd);
         }
@@ -212,6 +216,9 @@ int exec_lcommand(struct lcommand_t cmd) {
     int bg_stat = (cmd.n == 1) && cmd.c[0].async; //print status
 
     int i;
+
+    int pgid = 0;
+
     for (i = 0; i < cmd.n; ++i) {
         struct command_t *p = cmd.c + i;
         if (p->filename[0] && redir_in(&cfd[0], p->filename[0]) < 0)
@@ -225,7 +232,7 @@ int exec_lcommand(struct lcommand_t cmd) {
 
         struct job_t job = null_job;
 
-        fexec_cmd(p, cfd, &nfd[0], &job);
+        fexec_cmd(p, cfd, &nfd[0], &job, pgid);
         move_fd(cfd, nfd);
 
         if (job.pid < 0) {
@@ -242,6 +249,11 @@ int exec_lcommand(struct lcommand_t cmd) {
         }
 
         unblock_chld();
+
+        if (p->pipe)
+            pgid = job.pgid;
+        else
+            pgid = 0;
 
         if (!p->async) {
             if (!p->pipe) {

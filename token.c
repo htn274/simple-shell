@@ -9,7 +9,7 @@
 
 const struct ltoken_t null_ltok = {0, 0, 0};
 
-const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";"};
+const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";", "*", "?"};
 const char n_stok = sizeof(spec_tok)/sizeof(spec_tok[0]);
 
 void free_tok(struct token_t *tok)
@@ -80,12 +80,12 @@ int is_last_tok_aliasible(struct ltoken_t *ltok) {
 }
 
 void str_merge(struct token_t *a, struct token_t *b) {
-    int lena = a->len;
-    int len = lena + b->len;
+    int len = a->len + b->len;
     a->val = realloc(a->val, len + 1);
+
+    memcpy(a->val + a->len, b->val, b->len + 1);
     a->len = len;
 
-    strcpy(a->val + lena, b->val);
     free_tok(b);
 }
 
@@ -300,7 +300,7 @@ void token_expand(struct ltoken_t *old_ltok, struct ltoken_t *ltok)
         } else if (tok->type == TOK_TILDE) {
             add_env(ltok, "HOME");
         } else {
-            if (is_string_token(*tok))
+            if (is_arg_token(*tok))
                 tok->type = TOK_NARG;
             add_token(ltok, *tok);
             tok->val = NULL;
