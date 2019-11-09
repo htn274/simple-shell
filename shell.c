@@ -109,17 +109,50 @@ int normalize(char **cmd) {
     return rep;
 }
 
+#define RC_FILE ".osh_rc"
+#define MAX_LINE 1000
+
+void setup() {
+    char *home_path = getenv("HOME");
+    int len1 = strlen(home_path);
+    int len2 = strlen(RC_FILE);
+    char *rc_path = malloc(len1 + 1 + len2 + 1);
+    strcpy(rc_path, home_path);
+    rc_path[len1] = '/';
+    strcpy(rc_path + len1 + 1, RC_FILE);
+
+    FILE *f = fopen(rc_path, "r");
+
+    if (!f)
+        return;
+
+    char cmd[MAX_LINE  +1];
+    while (!feof(f)) {
+        if (fgets(cmd ,MAX_LINE,f)) {
+            struct lcommand_t c;
+            if (parse_command(cmd, &c))
+                fputs(error_str, stderr);
+
+            if (c.n > 0) {
+                exec_lcommand(c);
+                free_lcommand(&c);
+            }
+        }
+    }
+
+    fclose(f);
+
+    free(rc_path);
+}
+
 int main(int argc, char **argv)
 {
     signal(SIGINT, SIG_IGN);
     signal(SIGCHLD, sigchild_handler);
-    
-    set_alias("ls", "ls --color=auto");
-    set_alias("grep", "grep --color=auto");
-    set_alias("l", "ls -lah");
-    set_alias("la", "ls -lAh");
 
     init_read();
+
+    setup();
 
     if (argc > 1) {
         //support for -c

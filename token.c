@@ -9,7 +9,21 @@
 
 const struct ltoken_t null_ltok = {0, 0, 0};
 
-const char *spec_tok[] = {"&&", "&", "|", "<", ">", "2>", "(", ")", ";", "*", "?"};
+const struct token_map_t spec_tok[] = {
+    {"&&", get_tok(TOK_AND)},
+    {"&", get_tok(TOK_ASYNC)},
+    {"|", get_tok(TOK_PIPE)},
+    {"<", get_tok(TOK_RDR_IN)},
+    {">", get_tok(TOK_RDR_OUT)},
+    {"2>", get_tok(TOK_RDR_ERR)},
+    {"(", get_tok(TOK_OBRACK)},
+    {")", get_tok(TOK_CBRACK)},
+    {";", get_tok(TOK_SEMICOL)},
+    {"\n", get_tok(TOK_SEMICOL)},
+    {"*", get_tok(TOK_STAR)},
+    {"?", get_tok(TOK_QMARK)}
+};
+
 const char n_stok = sizeof(spec_tok)/sizeof(spec_tok[0]);
 
 void free_tok(struct token_t *tok)
@@ -214,10 +228,10 @@ static struct token_t next_token(const char **s, struct ltoken_t * ltok)
     --(*s);
     //check for special tok
     for (int k = 0; k < n_stok; ++k) {
-        int len = compare_prefix(*s, spec_tok[k]);
+        int len = compare_prefix(*s, spec_tok[k].str);
         if (len > 0) {
             *s += len;
-            return get_tok(k);
+            return spec_tok[k].tok;
         }
     }
 

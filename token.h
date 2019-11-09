@@ -19,7 +19,10 @@ struct ltoken_t {
 
 extern const struct ltoken_t null_ltok;
 extern const char n_stok;
-extern const char *spec_tok[];
+extern const struct token_map_t {
+    const char * str;
+    const struct token_t tok;
+} spec_tok[] ;
 
 
 #define TOK_NULL -4 //token of null
@@ -55,16 +58,8 @@ static inline int is_mode_normal(int mode)
     return !(mode & (MODE_DQUOTE_FLAG | MODE_SQUOTE_FLAG));
 }
 
-static inline struct token_t get_tok_arg(int type, int len, char *s)
-{
-    struct token_t tok = {type, len, s};
-    return tok;
-}
-
-static inline struct token_t get_tok(int type)
-{
-    return get_tok_arg(type, 0, NULL);
-}
+#define get_tok_arg(type, len, s) ((struct token_t) {(type), (len), (s)})
+#define get_tok(type) (get_tok_arg((type), 0, NULL))
 
 static inline int is_arg_token(const struct token_t tok)
 {
